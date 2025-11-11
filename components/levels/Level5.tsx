@@ -2,15 +2,41 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Page } from '../../types';
 import LevelLayout from '../LevelLayout';
 import GaborCircle from '../GaborCircle';
-import GameEndScreen from '../GameEndScreen';
 
-const PATCH_SIZES = [25, 30, 35, 40]; // Use a medium size range for patches
+// New Game End Popup Component for Level 5
+const GameEndPopup: React.FC<{
+  score: number;
+  incorrectClicks: number;
+  onSubmit: () => void;
+}> = ({ score, incorrectClicks, onSubmit }) => (
+  <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" aria-modal="true" role="dialog">
+    <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl text-center w-full max-w-md animate-fade-in-up border-t-8 border-cyan-500">
+      <h2 className="text-3xl font-bold text-slate-800 mb-4">Level Complete</h2>
+      <div className="bg-slate-50 p-4 rounded-lg mb-6">
+        <p className="text-lg text-slate-600">You correctly identified the target patch:</p>
+        <p className="text-6xl font-bold text-teal-600 my-2" style={{textShadow: '2px 2px 4px rgba(0,0,0,0.1)'}}>{score}</p>
+        <p className="text-lg text-slate-600">times</p>
+        {incorrectClicks > 0 && (
+          <p className="text-md text-rose-500 mt-3 font-medium">with {incorrectClicks} incorrect clicks.</p>
+        )}
+      </div>
+      <button
+        onClick={onSubmit}
+        className="w-full py-3 px-6 rounded-lg font-semibold text-white bg-cyan-600 hover:bg-cyan-700 transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-cyan-300"
+      >
+        Submit
+      </button>
+    </div>
+  </div>
+);
+
+
+const PATCH_SIZES = [30, 40, 50, 60]; // Use a size range from 30px to 60px
 const START_CONTRAST = 1.0;
 const END_CONTRAST = 0.3;
 const WAVE_SPEED = 90; // pixels per second
 const BEAT_WIDTH = 350;
 const BEAT_SPACING = 100;
-const TARGET_SCORE = 10;
 
 // A self-contained Firework Particle component using React state for animation
 const FireworkParticle: React.FC<{ angle: number; distance: number; color: string }> = ({ angle, distance, color }) => {
@@ -126,31 +152,30 @@ const Level5: React.FC<{
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ecgContainerRef = useRef<HTMLDivElement>(null);
   const gameAreaRef = useRef<HTMLDivElement>(null);
-  // FIX: Changed useRef type to allow for an undefined initial value, which resolves the TypeScript error.
   const animationFrameId = useRef<number | undefined>();
   const lastFrameTime = useRef<number>(0);
   const nextBeatId = useRef<number>(0);
   const timeRef = useRef(0);
   const nextFireworkId = useRef(0);
+  const isLargePatchAnimationPausedRef = useRef(false);
 
+  const [gameState, setGameState] = useState<'playing' | 'finished'>('playing');
   const [heartbeats, setHeartbeats] = useState<Heartbeat[]>([]);
   const [score, setScore] = useState(0);
   const [incorrectClicks, setIncorrectClicks] = useState(0);
-  const [gameState, setGameState] = useState<'playing' | 'finished'>('playing');
-  const [isSuccess, setIsSuccess] = useState(false);
   const [ecgContainerSize, setEcgContainerSize] = useState({ width: 0, height: 0 });
   const [fireworks, setFireworks] = useState<{ id: number; x: number; y: number }[]>([]);
   const [largePatchBaseSize, setLargePatchBaseSize] = useState(200);
   const [dynamicLargePatchSize, setDynamicLargePatchSize] = useState(200);
   const [isLargePatchVisible, setIsLargePatchVisible] = useState(true);
   const [isGaborOnTop, setIsGaborOnTop] = useState(true);
+  const [isLargePatchAnimationPaused, setIsLargePatchAnimationPaused] = useState(false);
 
   const time = timeRef.current / 1000; // time in seconds
   const contrastFluctuation = Math.sin(time * 2) * 0.1; // Fluctuate by +/- 0.1
   const baseContrast = Math.max(END_CONTRAST, START_CONTRAST - (score / 20) * (START_CONTRAST - END_CONTRAST)); // Slow down contrast reduction
   const currentContrast = Math.max(0.1, Math.min(1.0, baseContrast + contrastFluctuation));
 
-  // FIX: Added an explicit return type `PatchData[]` to the callback to fix type inference issues with the `id` field.
   const generatePatchesForBeat = useCallback((): PatchData[] => {
     const shuffledSizes = shuffleArray(PATCH_SIZES);
     const largestSize = Math.max(...shuffledSizes);
@@ -238,6 +263,11 @@ const Level5: React.FC<{
   }, [heartbeats, ecgContainerSize]);
 
   const gameLoop = useCallback((timestamp: number) => {
+    if (gameState !== 'playing') {
+      if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
+      return;
+    }
+
     timeRef.current = timestamp;
     const deltaTime = lastFrameTime.current ? (timestamp - lastFrameTime.current) / 1000 : 0;
     lastFrameTime.current = timestamp;
@@ -256,10 +286,10 @@ const Level5: React.FC<{
     });
 
     animationFrameId.current = requestAnimationFrame(gameLoop);
-  }, [ecgContainerSize.width, generateNewHeartbeat]);
+  }, [gameState, ecgContainerSize.width, generateNewHeartbeat]);
 
   useEffect(() => {
-    if (gameState === 'playing' && ecgContainerSize.width > 0) {
+    if (ecgContainerSize.width > 0 && gameState === 'playing') {
         lastFrameTime.current = performance.now();
         if (heartbeats.length === 0) {
              setHeartbeats([generateNewHeartbeat(ecgContainerSize.width * 0.8)]);
@@ -271,7 +301,18 @@ const Level5: React.FC<{
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [gameState, gameLoop, ecgContainerSize.width, heartbeats.length, generateNewHeartbeat]);
+  }, [gameLoop, ecgContainerSize.width, heartbeats.length, generateNewHeartbeat, gameState]);
+  
+  // Game Timer
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+    const gameDuration = 45000 + Math.random() * (120000 - 45000); // 45s to 120s
+    const timer = setTimeout(() => {
+      setGameState('finished');
+    }, gameDuration);
+    return () => clearTimeout(timer);
+  }, [gameState]);
+
 
   useEffect(() => {
     drawECG();
@@ -287,11 +328,10 @@ const Level5: React.FC<{
       })));
     }, 1000);
     return () => clearInterval(intervalId);
-  }, [gameState, generatePatchesForBeat]);
+  }, [generatePatchesForBeat, gameState]);
 
   useEffect(() => {
     if (gameState !== 'playing') return;
-
     const intervalId = setInterval(() => {
       setIsGaborOnTop(Math.random() > 0.5);
     }, 1000);
@@ -299,25 +339,51 @@ const Level5: React.FC<{
     return () => clearInterval(intervalId);
   }, [gameState]);
 
+  // Handle large patch animations pausing
+  useEffect(() => {
+    isLargePatchAnimationPausedRef.current = isLargePatchAnimationPaused;
+  }, [isLargePatchAnimationPaused]);
+
   useEffect(() => {
     if (gameState !== 'playing') return;
+    let pauseTimer: number;
+    const scheduleNextToggle = () => {
+        const isCurrentlyPaused = isLargePatchAnimationPausedRef.current;
+        const duration = isCurrentlyPaused
+            ? 1000 + Math.random() * 2000 // Pause for 1-3 seconds
+            : 3000 + Math.random() * 4000; // Animate for 3-7 seconds
 
+        pauseTimer = window.setTimeout(() => {
+            setIsLargePatchAnimationPaused(prev => !prev);
+            scheduleNextToggle();
+        }, duration);
+    };
+    scheduleNextToggle();
+    return () => clearTimeout(pauseTimer);
+  }, [gameState]);
+
+  useEffect(() => {
+    if (gameState !== 'playing') return;
     // Blinking effect
     const blinkInterval = setInterval(() => {
-        setIsLargePatchVisible(v => !v);
-    }, 500); // Toggles every 0.5s for 1Hz blink rate
+        if (!isLargePatchAnimationPaused) {
+            setIsLargePatchVisible(v => !v);
+        }
+    }, 500);
 
     // Size change effect
     const sizeInterval = setInterval(() => {
-        const multiplier = 0.95 + Math.random() * 0.1; // Range: 0.95 to 1.05, for a more medium size
-        setDynamicLargePatchSize(largePatchBaseSize * multiplier);
-    }, 1000); // Changes size every second
+        if (!isLargePatchAnimationPaused) {
+            const multiplier = 0.95 + Math.random() * 0.1;
+            setDynamicLargePatchSize(largePatchBaseSize * multiplier);
+        }
+    }, 1000);
 
     return () => {
         clearInterval(blinkInterval);
         clearInterval(sizeInterval);
     };
-  }, [gameState, largePatchBaseSize]);
+  }, [largePatchBaseSize, isLargePatchAnimationPaused, gameState]);
 
 
   useEffect(() => {
@@ -344,7 +410,7 @@ const Level5: React.FC<{
 
     const resizeObserver = new ResizeObserver(updateSizes);
     resizeObserver.observe(container);
-    updateSizes(); // Initial call
+    updateSizes();
 
     return () => resizeObserver.disconnect();
   }, []);
@@ -356,8 +422,7 @@ const Level5: React.FC<{
     if (!beat || beat.clickedPatches.has(clickedPatch.id)) return;
 
     if (clickedPatch.isLargest) {
-      const newScore = score + 1;
-      setScore(newScore);
+      setScore(prev => prev + 1);
 
       const centerY = ecgContainerSize.height / 2;
       const fireworkX = beat.x + clickedPatch.relativeX;
@@ -369,54 +434,19 @@ const Level5: React.FC<{
           ? { ...b, clickedPatches: new Set(b.clickedPatches).add(clickedPatch.id) } 
           : b
       ));
-
-      if (newScore >= TARGET_SCORE) {
-        saveLevelCompletion('level5', true);
-        setIsSuccess(true);
-        setGameState('finished');
-      }
-
     } else {
-      setIncorrectClicks(1);
-      saveLevelCompletion('level5', false);
-      setIsSuccess(false);
-      setGameState('finished');
+      setIncorrectClicks(prev => prev + 1);
     }
   };
-
-  const resetLevel = useCallback(() => {
-    setScore(0);
-    setIncorrectClicks(0);
-    setGameState('playing');
-    setIsSuccess(false);
-    setHeartbeats([]);
-    setFireworks([]);
-    nextBeatId.current = 0;
-    setIsGaborOnTop(Math.random() > 0.5);
-  }, []);
 
   const removeFirework = (id: number) => {
     setFireworks(current => current.filter(f => f.id !== id));
   };
 
-  const renderGame = () => {
-    if (gameState === 'finished') {
-      return (
-        <GameEndScreen
-          isSuccess={isSuccess}
-          correctCount={score}
-          incorrectCount={incorrectClicks}
-          onNextLevel={() => setCurrentPage('level6')}
-          onReset={resetLevel}
-          score={score}
-          scoreLabel="Score"
-        />
-      );
-    }
+  const centerY = ecgContainerSize.height / 2;
 
-    const centerY = ecgContainerSize.height / 2;
-
-    return (
+  return (
+    <LevelLayout levelId={5} setCurrentPage={setCurrentPage}>
       <>
         <div ref={gameAreaRef} className="relative flex flex-col w-full flex-grow">
             {/* Top Section */}
@@ -439,7 +469,7 @@ const Level5: React.FC<{
                         key={`${beat.id}-${patch.id}`}
                         size={patch.size}
                         contrast={currentContrast}
-                        onClick={() => handleGaborClick(beat.id, patch)}
+                        onClick={(e) => { e.stopPropagation(); handleGaborClick(beat.id, patch); }}
                         style={{
                         position: 'absolute',
                         top: `${centerY + patch.relativeY}px`,
@@ -464,16 +494,24 @@ const Level5: React.FC<{
                 )}
             </div>
         </div>
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex justify-center space-x-8 my-4 w-full max-w-sm">
-          <div className="bg-teal-500 text-white p-3 rounded-lg shadow-md flex-1 text-center font-bold text-lg">Score: {score} / {TARGET_SCORE}</div>
-        </div>
+        {gameState === 'playing' && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex justify-center space-x-8 my-4 w-full max-w-sm">
+            <div className="bg-teal-500 text-white p-3 rounded-lg shadow-md flex-1 text-center font-bold text-lg">Correct: {score}</div>
+            <div className="bg-rose-500 text-white p-3 rounded-lg shadow-md flex-1 text-center font-bold text-lg">Incorrect: {incorrectClicks}</div>
+            </div>
+        )}
+        {gameState === 'finished' && (
+            <GameEndPopup
+                score={score}
+                incorrectClicks={incorrectClicks}
+                onSubmit={() => {
+                    const success = score > 0 && score >= incorrectClicks;
+                    saveLevelCompletion('level5', success);
+                    setCurrentPage('level6');
+                }}
+            />
+        )}
       </>
-    );
-  }
-
-  return (
-    <LevelLayout levelId={5} setCurrentPage={setCurrentPage}>
-      {renderGame()}
     </LevelLayout>
   );
 };
