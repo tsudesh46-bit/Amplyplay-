@@ -1,5 +1,4 @@
 import React from 'react';
-import { Page } from '../types';
 import { CheckCircleIcon, XCircleIcon, NextIcon, RetryIcon } from './ui/Icons';
 
 interface GameEndScreenProps {

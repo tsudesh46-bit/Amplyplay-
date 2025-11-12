@@ -1,519 +1,507 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Page } from '../../types';
-import LevelLayout from '../LevelLayout';
 import GaborCircle from '../GaborCircle';
+import { HomeIcon, HeartIcon, HeartOutlineIcon } from '../ui/Icons';
+import { RetryIcon } from '../ui/Icons';
 
-// New Game End Popup Component for Level 5
-const GameEndPopup: React.FC<{
-  score: number;
-  incorrectClicks: number;
-  onSubmit: () => void;
-}> = ({ score, incorrectClicks, onSubmit }) => (
-  <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" aria-modal="true" role="dialog">
-    <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl text-center w-full max-w-md animate-fade-in-up border-t-8 border-cyan-500">
-      <h2 className="text-3xl font-bold text-slate-800 mb-4">Level Complete</h2>
-      <div className="bg-slate-50 p-4 rounded-lg mb-6">
-        <p className="text-lg text-slate-600">You correctly identified the target patch:</p>
-        <p className="text-6xl font-bold text-teal-600 my-2" style={{textShadow: '2px 2px 4px rgba(0,0,0,0.1)'}}>{score}</p>
-        <p className="text-lg text-slate-600">times</p>
-        {incorrectClicks > 0 && (
-          <p className="text-md text-rose-500 mt-3 font-medium">with {incorrectClicks} incorrect clicks.</p>
-        )}
-      </div>
-      <button
-        onClick={onSubmit}
-        className="w-full py-3 px-6 rounded-lg font-semibold text-white bg-cyan-600 hover:bg-cyan-700 transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-cyan-300"
-      >
-        Submit
-      </button>
-    </div>
-  </div>
-);
+// --- Helper Components ---
 
-
-const PATCH_SIZES = [30, 40, 50, 60]; // Use a size range from 30px to 60px
-const START_CONTRAST = 1.0;
-const END_CONTRAST = 0.3;
-const WAVE_SPEED = 90; // pixels per second
-const BEAT_WIDTH = 350;
-const BEAT_SPACING = 100;
-
-// A self-contained Firework Particle component using React state for animation
-const FireworkParticle: React.FC<{ angle: number; distance: number; color: string }> = ({ angle, distance, color }) => {
-    const [style, setStyle] = useState<React.CSSProperties>({
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        width: '5px',
-        height: '5px',
-        borderRadius: '50%',
-        background: color,
-        transform: 'translate(-50%, -50%) scale(0)',
-        opacity: 1,
-        transition: 'transform 0.7s ease-out, opacity 0.7s ease-out',
-    });
-
-    useEffect(() => {
-        const finalX = Math.cos(angle * Math.PI / 180) * distance;
-        const finalY = Math.sin(angle * Math.PI / 180) * distance;
-        
-        const timer = setTimeout(() => {
-            setStyle(s => ({
-                ...s,
-                transform: `translate(${finalX-2.5}px, ${finalY-2.5}px) scale(1)`,
-                opacity: 0,
-            }));
-        }, 10);
-        return () => clearTimeout(timer);
-    }, [angle, distance]);
-
-    return <div style={style} />;
-};
-
-// A self-contained Firework component that removes itself after animation
-const Firework: React.FC<{ x: number; y: number; onCompleted: () => void }> = ({ x, y, onCompleted }) => {
-    useEffect(() => {
-        const timer = setTimeout(onCompleted, 800); // Animation duration + buffer
-        return () => clearTimeout(timer);
-    }, [onCompleted]);
-
-    const particles = Array.from({ length: 12 }).map((_, i) => ({
-        id: i,
-        angle: (i / 12) * 360,
-        distance: 40 + Math.random() * 20,
-        color: `hsl(${Math.random() * 60 + 30}, 100%, 50%)`,
-    }));
-
-    return (
-        <div className="absolute pointer-events-none" style={{ top: y, left: x, transform: 'translate(-50%, -50%)' }}>
-            {particles.map((p) => <FireworkParticle key={p.id} {...p} />)}
-        </div>
-    );
-};
-
-// "Fake" patch component
-const SolidCircle: React.FC<{
-  size: number;
-  contrast: number;
-  onClick: (event: React.MouseEvent) => void;
-  style?: React.CSSProperties;
-  className?: string;
-}> = ({ size, contrast, onClick, style, className = '' }) => {
-  const circleStyle: React.CSSProperties = {
-    width: `${size}px`,
-    height: `${size}px`,
-    borderRadius: '50%',
-    cursor: 'pointer',
-    opacity: contrast,
-    backgroundColor: `rgba(128, 128, 128, ${0.8 * contrast})`,
-    transition: 'transform 0.1s ease-out, opacity 0.2s ease-out',
-    ...style,
-  };
-
+const Fireworks: React.FC<{ x: number; y: number }> = ({ x, y }) => {
+  const particles = Array.from({ length: 20 });
   return (
-    <div
-      onClick={onClick}
-      style={circleStyle}
-      className={`hover:scale-110 ${className}`}
-      aria-label="Solid circle"
-    ></div>
+    <div className="absolute inset-0 pointer-events-none z-50">
+      {particles.map((_, i) => (
+        <div
+          key={i}
+          className="absolute rounded-full bg-yellow-400 animate-firework"
+          style={{
+            left: x,
+            top: y,
+            '--i': i,
+            width: `${Math.random() * 4 + 2}px`,
+            height: `${Math.random() * 4 + 2}px`,
+          }}
+        />
+      ))}
+      <style>{`
+        @keyframes firework {
+          0% { transform: translate(0, 0) scale(1); opacity: 1; }
+          100% { 
+            transform: translate(calc(cos(var(--i) * 18deg) * 60px), calc(sin(var(--i) * 18deg) * 60px)) scale(0); 
+            opacity: 0; 
+          }
+        }
+        .animate-firework {
+          animation: firework 0.6s ease-out forwards;
+        }
+      `}</style>
+    </div>
   );
 };
 
-interface PatchData {
-  id: 'P' | 'Q' | 'R' | 'S';
-  relativeX: number;
-  relativeY: number;
-  size: number;
-  isLargest: boolean;
-}
 
-interface Heartbeat {
-  id: number;
-  x: number;
-  patches: PatchData[];
-  clickedPatches: Set<string>;
-  yOffsets: Record<string, number>;
-}
-
-const shuffleArray = (array: any[]) => {
-  const newArray = [...array];
-  for (let i = newArray.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-  }
-  return newArray;
-};
+// --- Main Level 5 Component ---
 
 const Level5: React.FC<{
   setCurrentPage: (page: Page) => void;
   saveLevelCompletion: (levelId: string, isCompleted: boolean) => void;
-}> = ({ setCurrentPage, saveLevelCompletion }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const ecgContainerRef = useRef<HTMLDivElement>(null);
-  const gameAreaRef = useRef<HTMLDivElement>(null);
-  const animationFrameId = useRef<number | undefined>();
-  const lastFrameTime = useRef<number>(0);
-  const nextBeatId = useRef<number>(0);
-  const timeRef = useRef(0);
-  const nextFireworkId = useRef(0);
-  const isLargePatchAnimationPausedRef = useRef(false);
-
-  const [gameState, setGameState] = useState<'playing' | 'finished'>('playing');
-  const [heartbeats, setHeartbeats] = useState<Heartbeat[]>([]);
-  const [score, setScore] = useState(0);
-  const [incorrectClicks, setIncorrectClicks] = useState(0);
-  const [ecgContainerSize, setEcgContainerSize] = useState({ width: 0, height: 0 });
-  const [fireworks, setFireworks] = useState<{ id: number; x: number; y: number }[]>([]);
-  const [largePatchBaseSize, setLargePatchBaseSize] = useState(200);
-  const [dynamicLargePatchSize, setDynamicLargePatchSize] = useState(200);
-  const [isLargePatchVisible, setIsLargePatchVisible] = useState(true);
-  const [isGaborOnTop, setIsGaborOnTop] = useState(true);
-  const [isLargePatchAnimationPaused, setIsLargePatchAnimationPaused] = useState(false);
-
-  const time = timeRef.current / 1000; // time in seconds
-  const contrastFluctuation = Math.sin(time * 2) * 0.1; // Fluctuate by +/- 0.1
-  const baseContrast = Math.max(END_CONTRAST, START_CONTRAST - (score / 20) * (START_CONTRAST - END_CONTRAST)); // Slow down contrast reduction
-  const currentContrast = Math.max(0.1, Math.min(1.0, baseContrast + contrastFluctuation));
-
-  const generatePatchesForBeat = useCallback((): PatchData[] => {
-    const shuffledSizes = shuffleArray(PATCH_SIZES);
-    const largestSize = Math.max(...shuffledSizes);
-
-    const relativePoints = {
-      P1: { x: BEAT_WIDTH * 0.15, y: -20 },
-      Q1: { x: BEAT_WIDTH * 0.25, y: 10 },
-      R1: { x: BEAT_WIDTH * 0.3, y: -80 },
-      S2: { x: BEAT_WIDTH * 0.85, y: 25 },
-    };
-
-    return [
-      { id: 'P', relativeX: relativePoints.P1.x, relativeY: relativePoints.P1.y, size: shuffledSizes[0], isLargest: shuffledSizes[0] === largestSize },
-      { id: 'Q', relativeX: relativePoints.Q1.x, relativeY: relativePoints.Q1.y, size: shuffledSizes[1], isLargest: shuffledSizes[1] === largestSize },
-      { id: 'R', relativeX: relativePoints.R1.x, relativeY: relativePoints.R1.y, size: shuffledSizes[2], isLargest: shuffledSizes[2] === largestSize },
-      { id: 'S', relativeX: relativePoints.S2.x, relativeY: relativePoints.S2.y, size: shuffledSizes[3], isLargest: shuffledSizes[3] === largestSize },
-    ];
-  }, []);
-
-  const generateNewHeartbeat = useCallback((x: number): Heartbeat => {
-    return {
-      id: nextBeatId.current++,
-      x,
-      patches: generatePatchesForBeat(),
-      clickedPatches: new Set(),
-      yOffsets: {
-          P1: (Math.random() - 0.5) * 10, R1: (Math.random() - 0.5) * 20, S1: (Math.random() - 0.5) * 15,
-          P2: (Math.random() - 0.5) * 10, R2: (Math.random() - 0.5) * 20, S2: (Math.random() - 0.5) * 15,
-      }
-    };
-  }, [generatePatchesForBeat]);
-
-
-  const drawECG = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !ecgContainerSize.height) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = '#dc2626'; // Blood red
-    ctx.lineWidth = 3;
-    ctx.shadowColor = 'rgba(255, 0, 0, 0.5)';
-    ctx.shadowBlur = 8;
-    
-    const centerY = canvas.height / 2;
-
-    ctx.beginPath();
-    ctx.moveTo(-10, centerY);
-
-    heartbeats.forEach(beat => {
-        const p1_y = centerY + -20 + beat.yOffsets.P1;
-        const q1_y = centerY + 10;
-        const r1_y = centerY + -80 + beat.yOffsets.R1;
-        const s1_y = centerY + 30 + beat.yOffsets.S1;
-        const t1_y = centerY + -15;
-
-        const p2_y = centerY + -25 + beat.yOffsets.P2;
-        const q2_y = centerY + 5;
-        const r2_y = centerY + -70 + beat.yOffsets.R2;
-        const s2_y = centerY + 25 + beat.yOffsets.S2;
-        const t2_y = centerY + -10;
-
-        // Beat 1
-        ctx.lineTo(beat.x + BEAT_WIDTH * 0.1, centerY);
-        ctx.quadraticCurveTo(beat.x + BEAT_WIDTH * 0.12, p1_y, beat.x + BEAT_WIDTH * 0.15, p1_y);
-        ctx.lineTo(beat.x + BEAT_WIDTH * 0.25, q1_y);
-        ctx.lineTo(beat.x + BEAT_WIDTH * 0.3, r1_y);
-        ctx.lineTo(beat.x + BEAT_WIDTH * 0.35, s1_y);
-        ctx.quadraticCurveTo(beat.x + BEAT_WIDTH * 0.4, s1_y-15, beat.x + BEAT_WIDTH * 0.45, t1_y);
-        ctx.quadraticCurveTo(beat.x + BEAT_WIDTH * 0.5, centerY-5, beat.x + BEAT_WIDTH * 0.55, centerY);
-
-        // Beat 2
-        ctx.lineTo(beat.x + BEAT_WIDTH * 0.6, centerY);
-        ctx.quadraticCurveTo(beat.x + BEAT_WIDTH * 0.62, p2_y, beat.x + BEAT_WIDTH * 0.65, p2_y);
-        ctx.lineTo(beat.x + BEAT_WIDTH * 0.75, q2_y);
-        ctx.lineTo(beat.x + BEAT_WIDTH * 0.8, r2_y);
-        ctx.lineTo(beat.x + BEAT_WIDTH * 0.85, s2_y);
-        ctx.quadraticCurveTo(beat.x + BEAT_WIDTH * 0.9, s2_y - 15, beat.x + BEAT_WIDTH * 0.95, t2_y);
-        ctx.quadraticCurveTo(beat.x + BEAT_WIDTH * 1.0, centerY-5, beat.x + BEAT_WIDTH + BEAT_SPACING, centerY);
-    });
-    ctx.lineTo(ecgContainerSize.width + 10, centerY);
-    ctx.stroke();
-
-  }, [heartbeats, ecgContainerSize]);
-
-  const gameLoop = useCallback((timestamp: number) => {
-    if (gameState !== 'playing') {
-      if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
-      return;
-    }
-
-    timeRef.current = timestamp;
-    const deltaTime = lastFrameTime.current ? (timestamp - lastFrameTime.current) / 1000 : 0;
-    lastFrameTime.current = timestamp;
-
-    setHeartbeats(prevHeartbeats => {
-      let newHeartbeats = prevHeartbeats.map(beat => ({
-        ...beat,
-        x: beat.x - WAVE_SPEED * deltaTime,
-      })).filter(beat => beat.x > -BEAT_WIDTH - BEAT_SPACING);
-
-      const lastBeat = newHeartbeats[newHeartbeats.length - 1];
-      if (!lastBeat || lastBeat.x < ecgContainerSize.width - BEAT_WIDTH - BEAT_SPACING) {
-        newHeartbeats.push(generateNewHeartbeat(ecgContainerSize.width));
-      }
-      return newHeartbeats;
-    });
-
-    animationFrameId.current = requestAnimationFrame(gameLoop);
-  }, [gameState, ecgContainerSize.width, generateNewHeartbeat]);
-
-  useEffect(() => {
-    if (ecgContainerSize.width > 0 && gameState === 'playing') {
-        lastFrameTime.current = performance.now();
-        if (heartbeats.length === 0) {
-             setHeartbeats([generateNewHeartbeat(ecgContainerSize.width * 0.8)]);
-        }
-        animationFrameId.current = requestAnimationFrame(gameLoop);
-    }
-    return () => {
-      if (animationFrameId.current) {
-        cancelAnimationFrame(animationFrameId.current);
-      }
-    };
-  }, [gameLoop, ecgContainerSize.width, heartbeats.length, generateNewHeartbeat, gameState]);
+}> = ({ setCurrentPage }) => {
+    const [gameState, setGameState] = useState<'playing' | 'paused' | 'gameOver'>('playing');
+    const [score, setScore] = useState(0);
+    const [highScore, setHighScore] = useState(0);
+    const [contrast, setContrast] = useState(1.0);
+    const [ecgLives, setEcgLives] = useState(3);
+    const [quizLives, setQuizLives] = useState(3);
+    const [gameOverReason, setGameOverReason] = useState<'quiz' | 'clicks' | null>(null);
   
-  // Game Timer
-  useEffect(() => {
-    if (gameState !== 'playing') return;
-    const gameDuration = 45000 + Math.random() * (120000 - 45000); // 45s to 120s
-    const timer = setTimeout(() => {
-      setGameState('finished');
-    }, gameDuration);
-    return () => clearTimeout(timer);
-  }, [gameState]);
+    const [ecgPatches, setEcgPatches] = useState<any[]>([]);
+    const [fireworks, setFireworks] = useState<{ x: number; y: number } | null>(null);
+  
+    // Side Patches
+    const [sidePatch, setSidePatch] = useState<any>(null);
+    const [gaborOnSideCount, setGaborOnSideCount] = useState(0);
+  
+    // Quiz
+    const [isQuizVisible, setIsQuizVisible] = useState(false);
+    const [quizInputValue, setQuizInputValue] = useState("");
+    const [isQuizIncorrect, setIsQuizIncorrect] = useState(false);
+  
+    const gameTickRef = useRef<number | null>(null);
+    const ecgPatchRefreshRef = useRef<number | null>(null);
+    const quizTimerRef = useRef<number | null>(null);
+    const middlePanelRef = useRef<HTMLDivElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
 
+    const animationData = useRef({
+        pattern: [] as number[],
+        featureIndices: [] as { type: string, index: number }[],
+        currentPatches: [] as any[],
+        isSetup: false,
+    }).current;
 
-  useEffect(() => {
-    drawECG();
-  }, [heartbeats, drawECG]);
+    const getEcgPattern = useCallback((midY: number, baseAmplitude: number) => {
+      const p: number[] = [];
+      const featureIndices: { type: string; index: number }[] = [];
+      const addSegment = (length: number, yFunc: (i: number) => number) => {
+        for (let i = 0; i < length; i++) p.push(yFunc(i));
+      };
+      
+      const oneBeat = (amplitude: number) => {
+        const beatStartIndex = p.length;
+        // P wave (up)
+        featureIndices.push({ type: 'P', index: beatStartIndex + 5 });
+        addSegment(10, i => midY - (Math.sin(i / 10 * Math.PI) * 10 * amplitude));
+        addSegment(5, () => midY);
+        // Q wave (down)
+        featureIndices.push({ type: 'Q', index: p.length + 4 });
+        addSegment(5, i => midY + (i * 2.5 * amplitude));
+        // R wave (up)
+        featureIndices.push({ type: 'R', index: p.length + 9 });
+        addSegment(10, i => midY + (12.5 * amplitude) - (i * 10 * amplitude));
+        // S wave (down)
+        featureIndices.push({ type: 'S', index: p.length + 9 });
+        addSegment(10, i => midY - (87.5 * amplitude) + (i * 12 * amplitude));
+        addSegment(5, i => midY + (32.5 * amplitude) - (i * 6.5 * amplitude));
+        // T wave (up)
+        featureIndices.push({ type: 'T', index: p.length + 10 });
+        addSegment(20, i => midY - (Math.sin(i / 20 * Math.PI) * 35 * amplitude));
+        addSegment(5, () => midY);
+      };
 
-  useEffect(() => {
-    if (gameState !== 'playing') return;
-    const intervalId = setInterval(() => {
-      setHeartbeats(prev => prev.map(beat => ({
-        ...beat,
-        patches: generatePatchesForBeat(),
-        clickedPatches: new Set(),
-      })));
-    }, 1000);
-    return () => clearInterval(intervalId);
-  }, [generatePatchesForBeat, gameState]);
+      for(let i = 0; i < 20; i++) {
+        const randomAmplitude = baseAmplitude * (0.8 + Math.random() * 0.4);
+        const baselineLength = Math.floor(40 + Math.random() * 60);
+        addSegment(baselineLength, () => midY);
+        oneBeat(randomAmplitude);
+      }
+      return { pattern: p, featureIndices };
+    }, []);
 
-  useEffect(() => {
-    if (gameState !== 'playing') return;
-    const intervalId = setInterval(() => {
-      setIsGaborOnTop(Math.random() > 0.5);
-    }, 1000);
-
-    return () => clearInterval(intervalId);
-  }, [gameState]);
-
-  // Handle large patch animations pausing
-  useEffect(() => {
-    isLargePatchAnimationPausedRef.current = isLargePatchAnimationPaused;
-  }, [isLargePatchAnimationPaused]);
-
-  useEffect(() => {
-    if (gameState !== 'playing') return;
-    let pauseTimer: number;
-    const scheduleNextToggle = () => {
-        const isCurrentlyPaused = isLargePatchAnimationPausedRef.current;
-        const duration = isCurrentlyPaused
-            ? 1000 + Math.random() * 2000 // Pause for 1-3 seconds
-            : 3000 + Math.random() * 4000; // Animate for 3-7 seconds
-
-        pauseTimer = window.setTimeout(() => {
-            setIsLargePatchAnimationPaused(prev => !prev);
-            scheduleNextToggle();
-        }, duration);
-    };
-    scheduleNextToggle();
-    return () => clearTimeout(pauseTimer);
-  }, [gameState]);
-
-  useEffect(() => {
-    if (gameState !== 'playing') return;
-    // Blinking effect
-    const blinkInterval = setInterval(() => {
-        if (!isLargePatchAnimationPaused) {
-            setIsLargePatchVisible(v => !v);
-        }
-    }, 500);
-
-    // Size change effect
-    const sizeInterval = setInterval(() => {
-        if (!isLargePatchAnimationPaused) {
-            const multiplier = 0.95 + Math.random() * 0.1;
-            setDynamicLargePatchSize(largePatchBaseSize * multiplier);
-        }
-    }, 1000);
-
-    return () => {
-        clearInterval(blinkInterval);
-        clearInterval(sizeInterval);
-    };
-  }, [largePatchBaseSize, isLargePatchAnimationPaused, gameState]);
-
-
-  useEffect(() => {
-    const container = gameAreaRef.current;
-    if (!container) return;
-
-    const updateSizes = () => {
-        const ecgContainer = ecgContainerRef.current;
-        const canvas = canvasRef.current;
-        if (canvas && ecgContainer) {
-            canvas.width = ecgContainer.offsetWidth;
-            canvas.height = ecgContainer.offsetHeight;
-            setEcgContainerSize({ width: ecgContainer.offsetWidth, height: ecgContainer.offsetHeight });
-        }
+    const generateNewPatches = useCallback(() => {
+        if (animationData.featureIndices.length === 0) return;
         
-        const middleSectionHeight = 256; // Corresponds to h-64 (16rem * 16px/rem)
-        const remainingHeight = container.offsetHeight - middleSectionHeight;
-        const sectionHeight = Math.max(0, remainingHeight / 2);
+        const numPatches = 8;
+        const newPatches = [];
+        const distractorSizes = [20, 25, 30, 35, 22, 28, 32, 18, 38];
+        const targetSize = 45;
+        
+        const targetPatchIndex = Math.floor(Math.random() * numPatches);
 
-        const size = Math.max(40, Math.min(container.offsetWidth * 0.8, sectionHeight * 0.8));
-        setLargePatchBaseSize(size);
-        setDynamicLargePatchSize(size);
+        const availableIndices = [...animationData.featureIndices];
+        for (let i = availableIndices.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [availableIndices[i], availableIndices[j]] = [availableIndices[j], availableIndices[i]];
+        }
+
+        for (let i = 0; i < numPatches; i++) {
+            if (availableIndices.length === 0) break;
+            const selectedFeature = availableIndices.pop();
+            if (!selectedFeature) break;
+
+            const isTarget = i === targetPatchIndex;
+            const size = isTarget ? targetSize : distractorSizes[Math.floor(Math.random() * distractorSizes.length)];
+
+            newPatches.push({
+                id: `ecg-${Date.now()}-${i}`,
+                featureIndex: selectedFeature.index,
+                size: size,
+                isTarget: isTarget,
+            });
+        }
+        animationData.currentPatches = newPatches;
+    }, [animationData]);
+
+    const handleEcgPatchClick = (patch: any, event: React.MouseEvent) => {
+        if (gameState !== 'playing') return;
+
+        if (patch.isTarget) {
+            setScore(prev => prev + 1);
+            setFireworks({ x: event.clientX, y: event.clientY });
+            setTimeout(() => setFireworks(null), 600);
+            generateNewPatches();
+        } else {
+            const newLives = ecgLives - 1;
+            setEcgLives(newLives);
+            
+            if(middlePanelRef.current) {
+                middlePanelRef.current.classList.add('animate-shake');
+                setTimeout(() => {
+                    middlePanelRef.current?.classList.remove('animate-shake');
+                }, 820);
+            }
+
+            if (newLives <= 0) {
+                 setTimeout(() => {
+                    setHighScore(prev => Math.max(prev, score));
+                    setGameOverReason('clicks');
+                    setGameState('gameOver');
+                 }, 820);
+            }
+        }
     };
 
-    const resizeObserver = new ResizeObserver(updateSizes);
-    resizeObserver.observe(container);
-    updateSizes();
+    useEffect(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
 
-    return () => resizeObserver.disconnect();
-  }, []);
+      let animationFrameId: number;
+      let currentX = 0;
+      let patternStep = 0;
 
-  const handleGaborClick = (beatId: number, clickedPatch: PatchData) => {
-    if (gameState !== 'playing') return;
+      const setup = () => {
+        const parent = canvas.parentElement;
+        if (!parent) return;
+        canvas.width = parent.offsetWidth;
+        canvas.height = parent.offsetHeight;
+        const baseAmplitude = Math.min(canvas.height / 180, 2.5);
+        const { pattern, featureIndices } = getEcgPattern(canvas.height / 2, baseAmplitude);
+        animationData.pattern = pattern;
+        animationData.featureIndices = featureIndices;
+        generateNewPatches();
+        currentX = 0;
+        patternStep = 0;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        animationData.isSetup = true;
+      };
 
-    const beat = heartbeats.find(b => b.id === beatId);
-    if (!beat || beat.clickedPatches.has(clickedPatch.id)) return;
+      const draw = () => {
+        if (!animationData.isSetup) {
+          animationFrameId = requestAnimationFrame(draw);
+          return;
+        }
+        const speed = 3;
+        
+        const clearX = (currentX + speed + 8) % canvas.width;
+        ctx.clearRect(clearX, 0, 20, canvas.height);
 
-    if (clickedPatch.isLargest) {
-      setScore(prev => prev + 1);
+        ctx.beginPath();
+        ctx.strokeStyle = '#ff0000';
+        ctx.lineWidth = 3;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
 
-      const centerY = ecgContainerSize.height / 2;
-      const fireworkX = beat.x + clickedPatch.relativeX;
-      const fireworkY = centerY + clickedPatch.relativeY;
-      setFireworks(current => [...current, { id: nextFireworkId.current++, x: fireworkX, y: fireworkY }]);
+        let prevX = currentX % canvas.width;
+        let prevY = animationData.pattern[patternStep % animationData.pattern.length];
+        ctx.moveTo(prevX, prevY);
 
-      setHeartbeats(prev => prev.map(b => 
-        b.id === beatId 
-          ? { ...b, clickedPatches: new Set(b.clickedPatches).add(clickedPatch.id) } 
-          : b
-      ));
-    } else {
-      setIncorrectClicks(prev => prev + 1);
-    }
-  };
+        for (let i = 1; i <= speed; i++) {
+            const nextX = (currentX + i) % canvas.width;
+            const nextY = animationData.pattern[(patternStep + i) % animationData.pattern.length];
+            if (nextX > prevX) {
+                ctx.lineTo(nextX, nextY);
+            } else {
+                ctx.stroke(); 
+                ctx.beginPath();
+                ctx.moveTo(nextX, nextY);
+            }
+            prevX = nextX;
+        }
+        ctx.stroke();
+        
+        const patchesOnScreen = animationData.currentPatches.map(p => {
+          const x = (p.featureIndex - patternStep + currentX);
+          const finalX = (x % canvas.width + canvas.width) % canvas.width; // Ensure positive value
+          const y = animationData.pattern[p.featureIndex % animationData.pattern.length];
+          return { ...p, x: finalX, y };
+        });
+        setEcgPatches(patchesOnScreen);
 
-  const removeFirework = (id: number) => {
-    setFireworks(current => current.filter(f => f.id !== id));
-  };
+        currentX += speed;
+        patternStep += speed;
 
-  const centerY = ecgContainerSize.height / 2;
+        animationFrameId = requestAnimationFrame(draw);
+      };
+  
+      setup();
+      draw();
+  
+      const resizeObserver = new ResizeObserver(() => {
+          cancelAnimationFrame(animationFrameId);
+          setup();
+          draw();
+      });
+      if (canvas.parentElement) {
+          resizeObserver.observe(canvas.parentElement);
+      }
+  
+      return () => {
+        cancelAnimationFrame(animationFrameId);
+        if (canvas.parentElement) {
+            resizeObserver.unobserve(canvas.parentElement);
+        }
+      };
+    }, [animationData, getEcgPattern, generateNewPatches]);
 
-  return (
-    <LevelLayout levelId={5} setCurrentPage={setCurrentPage}>
-      <>
-        <div ref={gameAreaRef} className="relative flex flex-col w-full flex-grow">
-            {/* Top Section */}
-            <div className="flex-1 bg-white relative flex items-center justify-center overflow-hidden">
-                {isGaborOnTop ? (
-                    <GaborCircle size={dynamicLargePatchSize} contrast={isLargePatchVisible ? currentContrast : 0} onClick={() => {}} className="pointer-events-none" />
-                ) : (
-                    <SolidCircle size={dynamicLargePatchSize} contrast={isLargePatchVisible ? currentContrast : 0} onClick={() => {}} className="pointer-events-none" />
-                )}
-            </div>
+    const scheduleQuiz = useCallback(() => {
+        if (quizTimerRef.current) clearTimeout(quizTimerRef.current);
+        const randomTime = Math.random() * 60000 + 30000;
+        quizTimerRef.current = setTimeout(() => {
+            setQuizInputValue("");
+            setGameState('paused');
+            setIsQuizVisible(true);
+        }, randomTime);
+    }, []);
+
+    const generateSidePatch = useCallback(() => {
+        const type = Math.random() > 0.5 ? 'gabor' : 'fake';
+        const position = Math.random() > 0.5 ? 'top' : 'bottom';
+        const size = Math.random() * 50 + 40;
+
+        if (type === 'gabor') {
+            setGaborOnSideCount(prev => prev + 1);
+        }
+        setSidePatch({ id: `side-${Date.now()}`, type, position, size });
+    }, []);
+
+    const startGame = useCallback(() => {
+        setScore(0);
+        setContrast(1.0);
+        setGaborOnSideCount(0);
+        setEcgPatches([]);
+        setSidePatch(null);
+        setGameState('playing');
+        setEcgLives(3);
+        setQuizLives(3);
+        setGameOverReason(null);
+        
+        generateNewPatches();
+        generateSidePatch();
+        scheduleQuiz();
+
+        if (gameTickRef.current) clearInterval(gameTickRef.current);
+        gameTickRef.current = setInterval(() => {
+            setContrast(prev => Math.max(0.1, prev - 0.005));
+            generateSidePatch();
+        }, 1000);
+
+        if (ecgPatchRefreshRef.current) clearInterval(ecgPatchRefreshRef.current);
+        ecgPatchRefreshRef.current = setInterval(() => {
+            generateNewPatches();
+        }, 5000);
+
+    }, [generateNewPatches, generateSidePatch, scheduleQuiz]);
+
+
+    useEffect(() => {
+        startGame();
+        return () => {
+            if (gameTickRef.current) clearInterval(gameTickRef.current);
+            if (quizTimerRef.current) clearTimeout(quizTimerRef.current);
+            if (ecgPatchRefreshRef.current) clearInterval(ecgPatchRefreshRef.current);
+        };
+    }, [startGame]);
+
+    useEffect(() => {
+        if (gameState !== 'playing') {
+            if (gameTickRef.current) clearInterval(gameTickRef.current);
+            if (quizTimerRef.current) clearTimeout(quizTimerRef.current);
+            if (ecgPatchRefreshRef.current) clearInterval(ecgPatchRefreshRef.current);
+        }
+    }, [gameState]);
+
+    const handleQuizSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (isQuizIncorrect) return;
+
+        const userAnswer = parseInt(quizInputValue, 10);
+        const isCorrect = userAnswer === gaborOnSideCount;
+        
+        const resumeGame = () => {
+            setIsQuizVisible(false);
+            setQuizInputValue("");
+            setGaborOnSideCount(0);
+            setGameState('playing');
+            scheduleQuiz();
             
-            {/* Middle Section (ECG) */}
-            <div ref={ecgContainerRef} className="h-64 shrink-0 bg-gray-900 relative overflow-hidden">
+            gameTickRef.current = setInterval(() => {
+                setContrast(prev => Math.max(0.1, prev - 0.005));
+                generateSidePatch();
+            }, 1000);
+
+            ecgPatchRefreshRef.current = setInterval(() => {
+                generateNewPatches();
+            }, 5000);
+        };
+
+        if (isCorrect) {
+            setScore(prev => prev + 10);
+            resumeGame();
+        } else {
+            const newLives = quizLives - 1;
+            setQuizLives(newLives);
+            setIsQuizIncorrect(true);
+            
+            if (newLives <= 0) {
+                setTimeout(() => {
+                    setHighScore(prev => Math.max(prev, score));
+                    setGameOverReason('quiz');
+                    setGameState('gameOver');
+                    setIsQuizVisible(false);
+                }, 820);
+            } else {
+                setTimeout(() => {
+                    setIsQuizIncorrect(false);
+                    resumeGame();
+                }, 820);
+            }
+        }
+    };
+
+    const renderSidePatch = () => {
+        if (!sidePatch) return null;
+        const style = {
+            position: 'absolute' as const,
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+            opacity: contrast,
+        };
+
+        if (sidePatch.type === 'gabor') {
+            return <GaborCircle size={sidePatch.size} contrast={contrast} onClick={() => {}} style={style} />;
+        } else {
+            return <div style={{...style, width: sidePatch.size, height: sidePatch.size, backgroundColor: 'grey', borderRadius: '50%'}} />;
+        }
+    };
+
+    return (
+        <div className="flex flex-col h-screen w-screen bg-black font-sans">
+             <div className="absolute top-4 left-4 z-20 text-slate-700 bg-gradient-to-br from-white to-cyan-100 p-3 rounded-xl shadow-lg border border-cyan-200/50">
+                <p className="font-bold text-xl">Score: {score}</p>
+                <div className="flex items-center mt-2">
+                    <div className="flex gap-1">
+                        {Array.from({ length: 3 }).map((_, i) =>
+                            i < ecgLives ? (
+                                <HeartIcon key={i} className="w-6 h-6 text-red-500" />
+                            ) : (
+                                <HeartOutlineIcon key={i} className="w-6 h-6 text-red-500/70" />
+                            )
+                        )}
+                    </div>
+                </div>
+                <p className="text-sm mt-2">High Score: {highScore}</p>
+            </div>
+            <button
+                onClick={() => setCurrentPage('home')}
+                className="absolute top-4 right-4 bg-white/80 text-cyan-600 p-3 rounded-full shadow-lg z-20 transition transform hover:scale-110"
+                aria-label="Home"
+            >
+                <HomeIcon className="w-8 h-8"/>
+            </button>
+            
+            <div className="h-1/3 bg-white relative">{sidePatch?.position === 'top' && renderSidePatch()}</div>
+            
+            <div ref={middlePanelRef} className="h-1/3 bg-black relative overflow-hidden">
                 <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full" />
-                <div className="absolute top-0 right-0 h-full w-32 bg-gradient-to-l from-gray-900 to-transparent pointer-events-none"></div>
-                {heartbeats.map(beat =>
-                beat.patches.map(patch => 
-                    !beat.clickedPatches.has(patch.id) && (
-                    <GaborCircle
-                        key={`${beat.id}-${patch.id}`}
-                        size={patch.size}
-                        contrast={currentContrast}
-                        onClick={(e) => { e.stopPropagation(); handleGaborClick(beat.id, patch); }}
-                        style={{
-                        position: 'absolute',
-                        top: `${centerY + patch.relativeY}px`,
-                        left: `${beat.x + patch.relativeX}px`,
-                        transform: 'translate(-50%, -50%)',
-                        }}
+                {ecgPatches.map(p => (
+                    <GaborCircle 
+                        key={p.id}
+                        size={p.size}
+                        contrast={contrast}
+                        onClick={(e) => handleEcgPatchClick(p, e)}
+                        style={{ position: 'absolute', top: p.y, left: p.x, transform: 'translate(-50%, -50%)', zIndex: 10 }}
                     />
-                    )
-                )
-                )}
-                {fireworks.map(f => (
-                <Firework key={f.id} x={f.x} y={f.y} onCompleted={() => removeFirework(f.id)} />
                 ))}
             </div>
+            
+            <div className="h-1/3 bg-white relative">{sidePatch?.position === 'bottom' && renderSidePatch()}</div>
 
-            {/* Bottom Section */}
-            <div className="flex-1 bg-white relative flex items-center justify-center overflow-hidden">
-                {!isGaborOnTop ? (
-                    <GaborCircle size={dynamicLargePatchSize} contrast={isLargePatchVisible ? currentContrast : 0} onClick={() => {}} className="pointer-events-none" />
-                ) : (
-                    <SolidCircle size={dynamicLargePatchSize} contrast={isLargePatchVisible ? currentContrast : 0} onClick={() => {}} className="pointer-events-none" />
-                )}
-            </div>
+            {fireworks && <Fireworks x={fireworks.x} y={fireworks.y} />}
+
+            {isQuizVisible && (
+                 <div className="absolute inset-0 bg-black/70 z-30 flex items-center justify-center">
+                    <div className={`bg-slate-800 text-white p-8 rounded-2xl shadow-lg border border-cyan-500 w-full max-w-sm text-center transition-transform duration-300 ${isQuizIncorrect ? 'animate-shake' : ''}`}>
+                        <h2 className="text-2xl font-bold mb-2 text-cyan-400">Time for a Check-in!</h2>
+                        <div className="flex justify-center gap-2 my-4">
+                            {Array.from({ length: 3 }).map((_, i) =>
+                                i < quizLives ? (
+                                    <HeartIcon key={i} className="w-8 h-8 text-red-500" />
+                                ) : (
+                                    <HeartOutlineIcon key={i} className="w-8 h-8 text-red-500/70" />
+                                )
+                            )}
+                        </div>
+                        <p className="mb-6 text-slate-300">How many <strong className="text-white">correct Gabor patches</strong> did you see in the top and bottom white areas?</p>
+                        <form onSubmit={handleQuizSubmit}>
+                            <input 
+                                type="number"
+                                value={quizInputValue}
+                                onChange={(e) => setQuizInputValue(e.target.value)}
+                                className="w-full p-3 rounded-lg bg-slate-700 text-white text-center text-2xl border-2 border-slate-600 focus:border-cyan-500 focus:outline-none"
+                                autoFocus
+                            />
+                            <button type="submit" className="mt-6 w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-lg transition">
+                                Submit Answer
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {gameState === 'gameOver' && (
+                <div className="absolute inset-0 bg-black/90 z-30 flex items-center justify-center">
+                    <div className="bg-slate-800 text-white p-8 rounded-2xl shadow-lg border border-rose-500 w-full max-w-sm text-center">
+                        <h2 className="text-3xl font-bold mb-2 text-rose-500">Game Over</h2>
+                        <p className="text-lg mb-4 text-slate-300">
+                           {gameOverReason === 'quiz' ? 'You ran out of guesses.' : 'You made 3 incorrect clicks.'}
+                        </p>
+                        <div className="bg-slate-700 p-4 rounded-lg mb-6">
+                            <p className="text-slate-400">Final Score</p>
+                            <p className="text-4xl font-bold text-white">{score}</p>
+                            <p className="text-slate-400 mt-2">High Score: {highScore}</p>
+                        </div>
+                        <button onClick={startGame} className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-lg transition flex items-center justify-center">
+                           <RetryIcon /> Try Again
+                        </button>
+                    </div>
+                </div>
+            )}
+
         </div>
-        {gameState === 'playing' && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex justify-center space-x-8 my-4 w-full max-w-sm">
-            <div className="bg-teal-500 text-white p-3 rounded-lg shadow-md flex-1 text-center font-bold text-lg">Correct: {score}</div>
-            <div className="bg-rose-500 text-white p-3 rounded-lg shadow-md flex-1 text-center font-bold text-lg">Incorrect: {incorrectClicks}</div>
-            </div>
-        )}
-        {gameState === 'finished' && (
-            <GameEndPopup
-                score={score}
-                incorrectClicks={incorrectClicks}
-                onSubmit={() => {
-                    const success = score > 0 && score >= incorrectClicks;
-                    saveLevelCompletion('level5', success);
-                    setCurrentPage('level6');
-                }}
-            />
-        )}
-      </>
-    </LevelLayout>
-  );
+    );
 };
 
 export default Level5;

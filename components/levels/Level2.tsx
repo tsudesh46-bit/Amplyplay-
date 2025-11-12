@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Page } from '../../types';
 
@@ -156,13 +155,13 @@ const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) 
                             )}
                         </div>
                         <h2 className={`text-3xl font-bold mb-3 ${isSuccess ? 'text-teal-600' : 'text-rose-600'}`} style={text3DStyle}>
-                            {isSuccess ? 'සුභ පැතුම්!' : 'නැවත උතසාහ කරනන'}
+                            {isSuccess ? 'සුබ පැතුම්!' : 'නැවත උත්සාහ කරන්න'}
                         </h2>
                         <p className="text-lg text-gray-600 mb-6">
-                            {isSuccess ? 'අදියර සාර්ථකව නිම කරන ලදී!' : 'ඔබට මීළඟ වතාව‍ේදී මීට වඩා හ‍ෙඳින් කළ හැකියි!'}
+                            {isSuccess ? 'අදියර සාර්ථකව නිම කරන ලදී!' : 'ඔබට මීළඟ වතාවේදී මීට වඩා හොඳින් කළ හැකියි!'}
                         </p>
                         <div className="bg-gray-50 p-4 rounded-lg mb-6">
-                            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">පරතිඵල</h3>
+                            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">ප්‍රතිඵල</h3>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="text-center"><div className="text-2xl font-bold text-teal-600">{correctCount}</div><div className="text-sm text-gray-500">නිවැරදියි</div></div>
                                 <div className="text-center"><div className="text-2xl font-bold text-rose-600">{incorrectCount}</div><div className="text-sm text-gray-500">වැරදියි</div></div>
@@ -170,7 +169,7 @@ const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) 
                         </div>
                         <button onClick={isSuccess ? () => setCurrentPage('level3') : resetLevel}
                             className={`w-full py-3 px-6 rounded-lg font-semibold text-white transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-4 ${isSuccess ? 'bg-cyan-600 hover:bg-cyan-700 focus:ring-cyan-300' : 'bg-rose-500 hover:bg-rose-600 focus:ring-rose-300'}`} style={buttonText3DStyle}>
-                            {isSuccess ? (<span className="flex items-center justify-center">මීළඟ අදියර<svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg></span>) : (<span className="flex items-center justify-center"><svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>නැවත උත්සාහ කරනන</span>)}
+                            {isSuccess ? (<span className="flex items-center justify-center">මීළඟ අදියර<svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg></span>) : (<span className="flex items-center justify-center"><svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>නැවත උත්සාහ කරන්න</span>)}
                         </button>
                     </div>
                 </div>
