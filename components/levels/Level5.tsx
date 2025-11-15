@@ -413,15 +413,24 @@ const Level5: React.FC<{
     const generateSidePatches = useCallback(() => {
         const newPatches: { top: any | null; bottom: any | null } = { top: null, bottom: null };
         let gaborCountThisTurn = 0;
+        const score = totalScoreRef.current;
 
+        // Determine if top patch appears and its type
         if (Math.random() > 0.3) {
             const type = Math.random() > 0.5 ? 'gabor' : 'fake';
             if (type === 'gabor') gaborCountThisTurn++;
             newPatches.top = { id: `side-top-${Date.now()}`, type, size: Math.random() * 50 + 40 };
         }
 
+        // Determine if bottom patch appears and its type
         if (Math.random() > 0.3) {
-            const type = Math.random() > 0.5 ? 'gabor' : 'fake';
+            let type = Math.random() > 0.5 ? 'gabor' : 'fake';
+            
+            // If score is <= 50 and top patch is already a gabor, bottom cannot be gabor.
+            if (score <= 50 && newPatches.top?.type === 'gabor') {
+                type = 'fake';
+            }
+            
             if (type === 'gabor') gaborCountThisTurn++;
             newPatches.bottom = { id: `side-bottom-${Date.now()}`, type, size: Math.random() * 50 + 40 };
         }
@@ -442,7 +451,7 @@ const Level5: React.FC<{
         gameTickRef.current = window.setInterval(() => {
             setContrast(prev => Math.max(0.1, prev - 0.005));
             generateSidePatches();
-        }, 1000);
+        }, 3000);
     
         ecgPatchRefreshRef.current = window.setInterval(() => {
             generateNewPatches();
@@ -473,7 +482,7 @@ const Level5: React.FC<{
         gameTickRef.current = window.setInterval(() => {
             setContrast(prev => Math.max(0.1, prev - 0.005));
             generateSidePatches();
-        }, 1000);
+        }, 3000);
 
         if (ecgPatchRefreshRef.current) clearInterval(ecgPatchRefreshRef.current);
         ecgPatchRefreshRef.current = window.setInterval(() => {
