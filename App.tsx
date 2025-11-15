@@ -9,6 +9,7 @@ import Level2 from './components/levels/Level2';
 import Level3 from './components/levels/Level3';
 import Level4 from './components/levels/Level4';
 import Level5 from './components/levels/Level5';
+import Level6 from './components/levels/Level6';
 import LevelPlaceholder from './components/levels/LevelPlaceholder';
 
 const App: React.FC = () => {
@@ -50,7 +51,7 @@ const App: React.FC = () => {
       case 'level5':
          return <Level5 {...levelProps} />;
       case 'level6':
-        return <LevelPlaceholder levelNumber={6} setCurrentPage={setCurrentPage} />;
+        return <Level6 {...levelProps} />;
       default:
         return <HomePage setCurrentPage={setCurrentPage} setIsSideMenuOpen={setIsSideMenuOpen} isSideMenuOpen={isSideMenuOpen} completedLevels={completedLevels}/>;
     }
