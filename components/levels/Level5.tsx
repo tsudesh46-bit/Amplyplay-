@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Page } from '../../types';
 import GaborCircle from '../GaborCircle';
@@ -83,6 +82,7 @@ const Level5: React.FC<{
     const gameTickRef = useRef<number | null>(null);
     const ecgPatchRefreshRef = useRef<number | null>(null);
     const quizTimerRef = useRef<number | null>(null);
+    const quizIncorrectTimerRef = useRef<number | null>(null);
     const middlePanelRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -132,27 +132,35 @@ const Level5: React.FC<{
     // Effect for handling Quiz life loss side-effects
     useEffect(() => {
         if (prevQuizLivesRef.current > quizLives) {
-            const lostLifeIndex = quizLives;
-            
-            setJustLostLife({ quiz: lostLifeIndex });
-            setTimeout(() => setJustLostLife({}), 600);
-            
+            setJustLostLife({ quiz: quizLives });
+            const justLostLifeTimer = window.setTimeout(() => setJustLostLife({}), 600);
+
             setIsQuizIncorrect(true);
             
+            if (quizIncorrectTimerRef.current) {
+                clearTimeout(quizIncorrectTimerRef.current);
+            }
+
             if (quizLives <= 0) {
-                setTimeout(() => {
+                quizIncorrectTimerRef.current = window.setTimeout(() => {
                     setGameOverReason('quiz');
                     setGameState('gameOver');
                     setIsQuizVisible(false);
                 }, 820);
             } else {
-                setTimeout(() => {
+                quizIncorrectTimerRef.current = window.setTimeout(() => {
                     setIsQuizIncorrect(false);
                     setQuizFeedback('incorrect');
                 }, 820);
             }
         }
         prevQuizLivesRef.current = quizLives;
+        
+        return () => {
+            if (quizIncorrectTimerRef.current) {
+                clearTimeout(quizIncorrectTimerRef.current);
+            }
+        }
     }, [quizLives]);
 
     // Update High Scores
@@ -511,7 +519,6 @@ const Level5: React.FC<{
 
     const handleQuizSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (isQuizIncorrect || quizFeedback === 'incorrect') return;
 
         const userAnswer = parseInt(quizInputValue, 10) || 0;
         const isCorrect = userAnswer === gaborOnSideCount;
@@ -701,7 +708,14 @@ const Level5: React.FC<{
                                     className="w-full p-3 rounded-lg bg-slate-700 text-white text-center text-2xl border-2 border-slate-600 focus:border-cyan-500 focus:outline-none"
                                     autoFocus
                                 />
-                                <button type="submit" className="mt-6 w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-lg transition">
+                                <button 
+                                    type="submit" 
+                                    className={`mt-6 w-full font-bold py-3 rounded-lg transition ${
+                                        isQuizIncorrect 
+                                        ? 'bg-slate-600 text-slate-400' 
+                                        : 'bg-cyan-600 hover:bg-cyan-700 text-white'
+                                    }`}
+                                >
                                     Submit Answer
                                 </button>
                             </form>
