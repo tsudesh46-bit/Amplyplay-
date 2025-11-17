@@ -52,6 +52,20 @@ const HomeButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
 
 const text3DStyle = { textShadow: '2px 2px 4px rgba(0,0,0,0.2)' };
 
+// Star Reward Component
+const StarReward: React.FC<{ show: boolean }> = ({ show }) => {
+  if (!show) return null;
+  return (
+    <div className="star-reward-container">
+      <div className="star-popup">
+        <svg fill="currentColor" viewBox="0 0 20 20">
+          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+        </svg>
+      </div>
+    </div>
+  );
+};
+
 // Local LevelComponent, replacing LevelLayout for this level
 const LevelComponent: React.FC<{ levelId: number, children: React.ReactNode, setCurrentPage: (page: Page) => void }> = ({ levelId, children, setCurrentPage }) => (
     <div className="relative min-h-screen bg-white flex flex-col items-center p-4 overflow-hidden">
@@ -68,7 +82,7 @@ const LevelComponent: React.FC<{ levelId: number, children: React.ReactNode, set
 
 interface Level2Props {
   setCurrentPage: (page: Page) => void;
-  saveLevelCompletion: (levelId: string, isCompleted: boolean) => void;
+  saveLevelCompletion: (levelId: string, stars: number) => void;
 }
 
 const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) => {
@@ -78,6 +92,8 @@ const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) 
     const [gameState, setGameState] = useState<'playing' | 'success' | 'fail'>('playing');
     const [numberPositions, setNumberPositions] = useState<{top: string, left: string}[]>([]);
     const [correctIndex, setCorrectIndex] = useState(0);
+    const [awardedStars, setAwardedStars] = useState(0);
+    const [showStarAnimation, setShowStarAnimation] = useState(false);
 
     const MAX_NUMBER = 101;
     const START_FONT_SIZE = 100, END_FONT_SIZE = 12;
@@ -87,6 +103,7 @@ const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) 
 
     const currentFontSize = Math.max(END_FONT_SIZE, START_FONT_SIZE - (currentNumber - 1) * FONT_SIZE_DECREMENT);
     const currentContrast = Math.max(END_CONTRAST, START_CONTRAST - (currentNumber - 1) * CONTRAST_DECREMENT);
+    const progress = currentNumber >= MAX_NUMBER - 1 ? 100 : ((currentNumber - 1) / (MAX_NUMBER - 2)) * 100;
 
     const generateNumberLayout = useCallback(() => {
         const fixedPositions = [
@@ -106,6 +123,26 @@ const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) 
         }
     }, [currentNumber, generateNumberLayout, gameState]);
 
+    useEffect(() => {
+        if (gameState !== 'playing') return;
+
+        const totalQuestions = MAX_NUMBER - 1;
+        const percentage = (correctCount / totalQuestions) * 100;
+
+        let starsEarned = 0;
+        if (percentage > 60) {
+            starsEarned = 2;
+        } else if (percentage > 30) {
+            starsEarned = 1;
+        }
+        
+        if (starsEarned > awardedStars) {
+            setAwardedStars(starsEarned);
+            setShowStarAnimation(true);
+            setTimeout(() => setShowStarAnimation(false), 1500);
+        }
+    }, [correctCount, awardedStars, gameState]);
+
     const handleNumberClick = (isCorrect: boolean) => {
         if (gameState !== 'playing') return;
 
@@ -115,14 +152,18 @@ const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) 
         setCorrectCount(newCorrectCount);
         setIncorrectCount(newIncorrectCount);
 
-        if (currentNumber === MAX_NUMBER) {
+        if (currentNumber >= MAX_NUMBER - 1) {
+            const totalQuestions = MAX_NUMBER - 1;
+            let stars = 0;
             if (newIncorrectCount === 0) {
-                setGameState('success');
-                saveLevelCompletion('level2', true);
+                stars = 3;
             } else {
-                setGameState('fail');
-                saveLevelCompletion('level2', false);
+                const percentage = (newCorrectCount / totalQuestions) * 100;
+                if (percentage > 60) stars = 2;
+                else if (percentage > 30) stars = 1;
             }
+            saveLevelCompletion('level2', stars);
+            setGameState(newIncorrectCount === 0 ? 'success' : 'fail');
         } else {
             setCurrentNumber(currentNumber + 1);
         }
@@ -132,13 +173,14 @@ const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) 
         setCurrentNumber(1);
         setCorrectCount(0);
         setIncorrectCount(0);
+        setAwardedStars(0);
         setGameState('playing');
     };
     
     const buttonText3DStyle = { textShadow: '1px 1px 2px rgba(0,0,0,0.4)' };
 
     const renderGame = () => {
-        if (currentNumber > MAX_NUMBER || gameState !== 'playing') {
+        if (currentNumber > MAX_NUMBER - 1 || gameState !== 'playing') {
              const isSuccess = gameState === 'success';
              return (
                 <div className="flex flex-col items-center justify-center h-full text-center">
@@ -205,18 +247,30 @@ const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) 
 
     return (
         <LevelComponent levelId={2} setCurrentPage={setCurrentPage}>
+            <StarReward show={showStarAnimation} />
             <div className="flex-grow flex flex-col items-center justify-center w-full">
                 {renderGame()}
             </div>
             {gameState === 'playing' && (
-                <div className="absolute bottom-20 sm:bottom-4 left-1/2 -translate-x-1/2 flex justify-center space-x-8 my-4 w-full max-w-md">
-                    <div className="bg-teal-500 text-white p-4 rounded-lg shadow-md flex-1 text-center font-bold text-lg" style={buttonText3DStyle}>
-                        <p className="mb-1">නිවැරදියි</p>
-                        <p>{correctCount}</p>
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-full max-w-md px-4">
+                    <div className="mb-2">
+                        <div className="flex justify-between items-center mb-1 text-slate-600">
+                            <span className="text-sm font-semibold">Progress</span>
+                            <span className="text-sm font-bold">{Math.round(progress)}%</span>
+                        </div>
+                        <div className="progress-bar-container-thin">
+                            <div className="progress-bar-fill-thin" style={{ width: `${progress}%` }}></div>
+                        </div>
                     </div>
-                    <div className="bg-rose-500 text-white p-4 rounded-lg shadow-md flex-1 text-center font-bold text-lg" style={buttonText3DStyle}>
-                        <p className="mb-1">වැරදියි</p>
-                        <p>{incorrectCount}</p>
+                    <div className="flex justify-center space-x-8 mt-2">
+                        <div className="bg-teal-500 text-white p-4 rounded-lg shadow-md flex-1 text-center font-bold text-lg" style={buttonText3DStyle}>
+                            <p className="mb-1">නිවැරදියි</p>
+                            <p>{correctCount}</p>
+                        </div>
+                        <div className="bg-rose-500 text-white p-4 rounded-lg shadow-md flex-1 text-center font-bold text-lg" style={buttonText3DStyle}>
+                            <p className="mb-1">වැරදියි</p>
+                            <p>{incorrectCount}</p>
+                        </div>
                     </div>
                 </div>
             )}

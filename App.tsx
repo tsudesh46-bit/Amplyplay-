@@ -22,10 +22,10 @@ const App: React.FC = () => {
     setCompletedLevels({});
   }, []);
 
-  const saveLevelCompletion = useCallback(async (levelId: string, isCompleted: boolean) => {
+  const saveLevelCompletion = useCallback(async (levelId: string, stars: number) => {
     setCompletedLevels((prev) => ({
       ...prev,
-      [levelId]: isCompleted,
+      [levelId]: stars,
     }));
   }, []);
 

@@ -47,19 +47,22 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose, setCurrentPage, co
                     Home
                 </button>
             </li>
-            {levels.map((level) => (
-              <li key={level}>
-                <button
-                  onClick={() => navigateTo(`level${level}` as Page)}
-                  className="flex items-center justify-between w-full text-left text-lg font-semibold text-slate-300 hover:text-cyan-400 transition duration-200"
-                >
-                  <span>Level {String(level).padStart(2, '0')}</span>
-                  {completedLevels[`level${level}`] && (
-                    <span className="text-yellow-400"><StarIcon className="w-5 h-5"/></span>
-                  )}
-                </button>
-              </li>
-            ))}
+            {levels.map((level) => {
+              const stars = completedLevels[`level${level}`] || 0;
+              return (
+                <li key={level}>
+                  <button
+                    onClick={() => navigateTo(`level${level}` as Page)}
+                    className="flex items-center justify-between w-full text-left text-lg font-semibold text-slate-300 hover:text-cyan-400 transition duration-200"
+                  >
+                    <span>Level {String(level).padStart(2, '0')}</span>
+                    {stars > 0 && (
+                       <StarIcon className="w-5 h-5 text-red-500"/>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
             <li>
               <button
                 onClick={() => navigateTo('performance')}

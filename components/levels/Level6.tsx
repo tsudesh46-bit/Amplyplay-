@@ -10,12 +10,13 @@ const MAX_SPEED = 50;
 const SPEED_INCREMENT = 5; // Speed increases every 2 points
 
 // --- Helper Components ---
-const SnakePixel: React.FC<{ size: number; style?: React.CSSProperties }> = ({ size, style }) => (
+const SnakePixel: React.FC<{ size: number; style?: React.CSSProperties, isFood?: boolean }> = ({ size, style, isFood }) => (
   <div
     style={{
       width: `${size - 1}px`,
       height: `${size - 1}px`,
-      backgroundColor: '#334155', // Dark slate color for the snake
+      backgroundColor: isFood ? '#e11d48' : '#334155',
+      borderRadius: isFood ? '50%' : '2px',
       position: 'absolute',
       ...style,
     }}
@@ -25,7 +26,7 @@ const SnakePixel: React.FC<{ size: number; style?: React.CSSProperties }> = ({ s
 // --- Main Component ---
 const Level6: React.FC<{
   setCurrentPage: (page: Page) => void;
-  saveLevelCompletion: (levelId: string, isCompleted: boolean) => void;
+  saveLevelCompletion: (levelId: string, stars: number) => void;
 }> = ({ setCurrentPage, saveLevelCompletion }) => {
   const gameBoardRef = useRef<HTMLDivElement>(null);
   
@@ -67,6 +68,7 @@ const Level6: React.FC<{
   // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault(); // Prevent page scrolling with arrow keys
       const isArrowKey = e.key.includes('Arrow');
 
       if ((gameState === 'start' || gameState === 'gameOver') && isArrowKey) {
@@ -111,7 +113,7 @@ const Level6: React.FC<{
           if (score > highScore) {
             setHighScore(score);
           }
-          saveLevelCompletion('level6', score > 0);
+          saveLevelCompletion('level6', score > 0 ? 1 : 0);
           return prevSnake;
         }
         
@@ -138,31 +140,37 @@ const Level6: React.FC<{
         setCellSize(boardWidth / GRID_SIZE);
       }
     };
+    
     updateCellSize();
-    window.addEventListener('resize', updateCellSize);
-    return () => window.removeEventListener('resize', updateCellSize);
+    let resizeTimer: number;
+    const handleResize = () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(updateCellSize, 100);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const renderOverlay = () => {
-    const commonClasses = "absolute inset-0 bg-slate-200/80 backdrop-blur-sm flex flex-col items-center justify-center text-center z-10 p-4 font-pixel rounded-lg";
+    const commonClasses = "absolute inset-0 bg-white/50 backdrop-blur-sm flex flex-col items-center justify-center text-center z-10 p-4 font-pixel rounded-md";
     const textClasses = "text-slate-800";
     
     if (gameState === 'start') {
       return (
         <div className={commonClasses}>
-          <h2 className={`text-4xl ${textClasses} mb-4`}>SNAKE</h2>
-          <p className={`text-2xl ${textClasses}`}>Use Arrow Keys</p>
-          <p className={`text-lg ${textClasses} mt-2`}>to begin</p>
+          <h2 className={`text-3xl sm:text-4xl ${textClasses} mb-4`}>SNAKE</h2>
+          <p className={`text-xl sm:text-2xl ${textClasses}`}>Use Arrow Keys</p>
+          <p className={`text-base sm:text-lg ${textClasses} mt-2`}>to begin</p>
         </div>
       );
     }
     if (gameState === 'gameOver') {
       return (
         <div className={commonClasses}>
-            <h2 className={`text-4xl ${textClasses} mb-4`}>Game Over</h2>
-            <div className="bg-black/10 p-4 rounded my-6 w-full max-w-xs">
+            <h2 className={`text-3xl sm:text-4xl ${textClasses} mb-4`}>Game Over</h2>
+            <div className="bg-slate-800/10 p-4 rounded-md my-6 w-full max-w-xs">
               <p className={`${textClasses} text-lg`}>Score: <span className="font-bold">{score}</span></p>
-              <p className={`${textClasses} text-sm mt-2`}>High Score: <span className="font-bold">{highScore}</span></p>
             </div>
             <button onClick={startGame} className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-6 rounded-lg transition text-lg flex items-center justify-center gap-2 shadow-lg">
               <RetryIcon /> Try Again
@@ -174,46 +182,55 @@ const Level6: React.FC<{
   };
   
   return (
-    <div className="flex flex-col h-screen w-screen bg-slate-900 font-sans items-center justify-center p-4">
-        <div className="w-[90vmin] flex justify-between items-baseline mb-4 px-2">
-            <h1 className="text-3xl font-bold text-cyan-400 font-pixel">LEVEL 06</h1>
-            <div className="text-right">
-                <p className="text-sm text-slate-400 font-pixel">HI-SCORE: <span className="text-white text-lg">{String(highScore).padStart(4, '0')}</span></p>
-            </div>
-        </div>
-        
-        <div 
-            ref={gameBoardRef} 
-            className="bg-slate-200 w-[90vmin] h-[90vmin] relative shadow-2xl border-4 border-cyan-800/50 rounded-lg"
-        >
-            {renderOverlay()}
-            <div className="absolute top-2 right-4 font-pixel text-slate-500 text-xl z-0">
-                SCORE: <span className="text-slate-800 font-bold">{String(score).padStart(4, '0')}</span>
-            </div>
-            {snake.map((segment, index) => (
+    <div className="flex flex-col h-screen w-screen bg-slate-200 font-sans">
+      <header className="w-full p-3 sm:p-4 bg-gradient-to-r from-cyan-100 via-blue-200 to-cyan-100 shadow-md z-10 shrink-0 border-b-2 border-white">
+          <div className="w-full max-w-5xl mx-auto flex justify-between items-center text-slate-700 font-pixel">
+              <h1 className="text-xl sm:text-2xl font-bold">LEVEL 06</h1>
+              <div className="text-center">
+                  <p className="text-sm sm:text-base">SCORE</p>
+                  <p className="text-lg sm:text-xl font-bold">{String(score).padStart(4, '0')}</p>
+              </div>
+              <div className="text-right">
+                  <p className="text-sm sm:text-base">HI-SCORE</p>
+                  <p className="text-lg sm:text-xl font-bold">{String(highScore).padStart(4, '0')}</p>
+              </div>
+          </div>
+      </header>
+      
+      <main className="flex-grow flex items-center justify-center w-full p-4 md:p-6 overflow-hidden">
+        <div className="bg-slate-800 p-2 sm:p-3 rounded-xl shadow-2xl aspect-square max-w-full max-h-full">
+            <div 
+              ref={gameBoardRef} 
+              className="bg-white w-full h-full rounded-md relative overflow-hidden"
+            >
+              {renderOverlay()}
+              {snake.map((segment, index) => (
+                <SnakePixel
+                  key={index}
+                  size={cellSize}
+                  style={{
+                    top: `${segment.y * cellSize}px`,
+                    left: `${segment.x * cellSize}px`,
+                    backgroundColor: index === 0 ? '#1e293b' : '#334155',
+                    zIndex: snake.length - index,
+                  }}
+                />
+              ))}
               <SnakePixel
-                key={index}
                 size={cellSize}
+                isFood
                 style={{
-                  top: `${segment.y * cellSize}px`,
-                  left: `${segment.x * cellSize}px`,
+                  top: `${food.y * cellSize}px`,
+                  left: `${food.x * cellSize}px`,
                 }}
               />
-            ))}
-            <SnakePixel
-              size={cellSize}
-              style={{
-                top: `${food.y * cellSize}px`,
-                left: `${food.x * cellSize}px`,
-                backgroundColor: '#e11d48', // Red color for food
-                borderRadius: '50%'
-              }}
-            />
+            </div>
         </div>
+      </main>
 
-        <button onClick={() => setCurrentPage('home')} className="absolute bottom-4 right-4 bg-white/80 text-cyan-600 p-3 rounded-full shadow-lg z-20 transition transform hover:scale-110" aria-label="Home">
-            <HomeIcon className="w-8 h-8"/>
-        </button>
+      <button onClick={() => setCurrentPage('home')} className="absolute bottom-4 right-4 bg-white/80 text-cyan-600 p-3 rounded-full shadow-lg z-20 transition transform hover:scale-110" aria-label="Home">
+          <HomeIcon className="w-8 h-8"/>
+      </button>
     </div>
   );
 };

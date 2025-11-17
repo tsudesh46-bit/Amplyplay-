@@ -10,19 +10,25 @@ interface HomePageProps {
   completedLevels: CompletedLevels;
 }
 
-const LevelButton: React.FC<{level: number, setCurrentPage: (page: Page) => void, isCompleted: boolean}> = ({ level, setCurrentPage, isCompleted }) => (
-    <button
-        onClick={() => setCurrentPage(`level${level}` as Page)}
-        className="group w-full bg-gradient-to-br from-white to-cyan-50 p-5 rounded-xl text-slate-700 text-lg font-medium transition-all duration-300 ease-in-out transform hover:-translate-y-1 border border-cyan-200 shadow-sm hover:shadow-lg hover:shadow-cyan-500/20 hover:border-cyan-400 flex justify-between items-center"
-    >
-        <span>Level {String(level).padStart(2, '0')}</span>
-        {isCompleted && (
-            <div className="text-yellow-400">
-                <StarIcon className="w-6 h-6"/>
-            </div>
-        )}
-    </button>
-);
+const LevelButton: React.FC<{level: number, setCurrentPage: (page: Page) => void, stars: number}> = ({ level, setCurrentPage, stars }) => {
+    const starColor = level === 1 && stars === 3 ? "text-red-500" : "text-yellow-400";
+
+    return (
+        <button
+            onClick={() => setCurrentPage(`level${level}` as Page)}
+            className="group w-full bg-gradient-to-br from-white to-cyan-50 p-5 rounded-xl text-slate-700 text-lg font-medium transition-all duration-300 ease-in-out transform hover:-translate-y-1 border border-cyan-200 shadow-sm hover:shadow-lg hover:shadow-cyan-500/20 hover:border-cyan-400 flex justify-between items-center"
+        >
+            <span>Level {String(level).padStart(2, '0')}</span>
+            {stars > 0 && (
+                <div className="flex gap-1">
+                    {Array.from({ length: stars }).map((_, i) => (
+                        <StarIcon key={i} className={`w-6 h-6 ${starColor}`}/>
+                    ))}
+                </div>
+            )}
+        </button>
+    );
+};
 
 const HomePage: React.FC<HomePageProps> = ({ setCurrentPage, setIsSideMenuOpen, isSideMenuOpen, completedLevels }) => {
   const levelCategories = {
@@ -62,7 +68,7 @@ const HomePage: React.FC<HomePageProps> = ({ setCurrentPage, setIsSideMenuOpen, 
                               key={level}
                               level={level}
                               setCurrentPage={setCurrentPage}
-                              isCompleted={!!completedLevels[`level${level}`]}
+                              stars={completedLevels[`level${level}`] || 0}
                           />
                       ))}
                   </div>

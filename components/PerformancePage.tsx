@@ -25,24 +25,31 @@ const PerformancePage: React.FC<PerformancePageProps> = ({ setCurrentPage, compl
           Level Completion Status
         </h3>
         <ul className="space-y-4">
-          {levels.map((level) => (
-            <li
-              key={level}
-              className="flex items-center justify-between text-lg text-slate-600 p-4 bg-slate-100 rounded-lg"
-            >
-              <span className="font-semibold">
-                Level {String(level).padStart(2, '0')}
-              </span>
-              {completedLevels[`level${level}`] ? (
-                <span className="flex items-center text-teal-600 font-bold">
-                  Completed
-                  <StarIcon className="ml-2 text-yellow-500 w-6 h-6" />
+          {levels.map((level) => {
+            const stars = completedLevels[`level${level}`] || 0;
+            return (
+              <li
+                key={level}
+                className="flex items-center justify-between text-lg text-slate-600 p-4 bg-slate-100 rounded-lg"
+              >
+                <span className="font-semibold">
+                  Level {String(level).padStart(2, '0')}
                 </span>
-              ) : (
-                <span className="text-rose-500 font-medium">Not Completed</span>
-              )}
-            </li>
-          ))}
+                {stars > 0 ? (
+                  <span className="flex items-center text-teal-600 font-bold">
+                    Completed
+                    <div className="flex items-center ml-3 gap-1">
+                      {Array.from({ length: stars }).map((_, i) => (
+                        <StarIcon key={i} className="text-yellow-500 w-6 h-6" />
+                      ))}
+                    </div>
+                  </span>
+                ) : (
+                  <span className="text-rose-500 font-medium">Not Completed</span>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </div>
 

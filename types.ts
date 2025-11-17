@@ -10,5 +10,5 @@ export type Page =
   | 'level6';
 
 export interface CompletedLevels {
-  [levelId: string]: boolean;
+  [levelId: string]: number;
 }
