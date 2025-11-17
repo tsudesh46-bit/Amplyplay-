@@ -79,41 +79,63 @@
         position: relative;
         overflow: hidden;
       }
-      /* Star Reward Animation */
-      .star-reward-container {
+      /* Fireworks Animation */
+      .fireworks-container {
         position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 1px;
+        height: 1px;
         pointer-events: none;
         z-index: 9999;
       }
-      .star-popup {
-        width: 256px;
-        height: 256px;
-        color: #facc15; /* yellow-400 */
-        animation: star-grow-burst 1.5s ease-out forwards;
+      .particle {
+        position: absolute;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: var(--particle-color, #facc15);
+        animation: firework-burst 1.2s ease-out forwards;
+        box-shadow: 0 0 5px var(--particle-color), 0 0 10px var(--particle-color);
       }
-      @keyframes star-grow-burst {
+      .particle:nth-child(3n) { --particle-color: #fb923c; } /* orange-400 */
+      .particle:nth-child(3n+1) { --particle-color: #f87171; } /* red-400 */
+      .particle:nth-child(3n+2) { --particle-color: #60a5fa; } /* blue-400 */
+      @keyframes firework-burst {
         0% {
-          transform: scale(0);
-          opacity: 0;
-        }
-        25% {
-          transform: scale(1.5) rotate(-15deg);
+          transform: translate(0, 0) scale(1.5);
           opacity: 1;
         }
-        50% {
-          transform: scale(1.2) rotate(10deg);
-        }
         100% {
-          transform: scale(3) rotate(0deg);
+          transform: translate(var(--x), var(--y)) scale(0.5);
           opacity: 0;
         }
+      }
+      .central-star {
+        position: absolute;
+        top: 0;
+        left: 0;
+        transform: translate(-50%, -50%);
+        font-size: 50px;
+        color: #fde047; /* yellow-300 */
+        text-shadow: 0 0 10px #facc15, 0 0 20px #f59e0b;
+        animation: star-burst 1s ease-out forwards;
+        opacity: 0;
+      }
+      @keyframes star-burst {
+          0% {
+              transform: translate(-50%, -50%) scale(0);
+              opacity: 0;
+          }
+          30% {
+              transform: translate(-50%, -50%) scale(1.5);
+              opacity: 1;
+          }
+          100% {
+              transform: translate(-50%, -50%) scale(1);
+              opacity: 0;
+          }
       }
       /* Thin Progress Bar */
       .progress-bar-container-thin {

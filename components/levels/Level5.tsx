@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Page } from '../../types';
 import GaborCircle from '../GaborCircle';
-import { HomeIcon, HeartIcon, HeartOutlineIcon, XCircleIcon } from '../ui/Icons';
+import { HomeIcon, HeartIcon, HeartOutlineIcon, XCircleIcon, PauseIcon, PlayIcon } from '../ui/Icons';
 import { RetryIcon } from '../ui/Icons';
+import ConfirmationModal from '../ConfirmationModal';
 
 // --- Helper Components ---
 
@@ -42,11 +43,14 @@ const Fireworks: React.FC<{ x: number; y: number }> = ({ x, y }) => {
 
 // --- Main Level 5 Component ---
 
-const Level5: React.FC<{
+interface Level5Props {
   setCurrentPage: (page: Page) => void;
-  saveLevelCompletion: (levelId: string, isCompleted: boolean) => void;
-}> = ({ setCurrentPage }) => {
-    const [gameState, setGameState] = useState<'playing' | 'paused' | 'gameOver'>('playing');
+  saveLevelCompletion: (levelId: string, stars: number) => void;
+}
+
+const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
+    const [gameState, setGameState] = useState<'playing' | 'paused' | 'gameOver' | 'pausedManually'>('playing');
+    const [showExitConfirm, setShowExitConfirm] = useState(false);
     
     // Scores
     const [ecgScore, setEcgScore] = useState(0);
@@ -324,7 +328,7 @@ const Level5: React.FC<{
       };
 
       const draw = () => {
-        if (!animationData.isSetup) {
+        if (!animationData.isSetup || gameState !== 'playing') {
           animationFrameId = requestAnimationFrame(draw);
           return;
         }
@@ -389,7 +393,7 @@ const Level5: React.FC<{
             resizeObserver.unobserve(canvas.parentElement);
         }
       };
-    }, [animationData, getEcgPattern, generateNewPatches]);
+    }, [animationData, getEcgPattern, generateNewPatches, gameState]);
 
     const scheduleQuiz = useCallback(() => {
         if (quizTimerRef.current) clearTimeout(quizTimerRef.current);
@@ -398,16 +402,12 @@ const Level5: React.FC<{
         let time;
 
         if (score <= 25) {
-            // 0 to 10 seconds
-            time = Math.random() * 10000;
+            time = 5000 + Math.random() * 5000;
         } else if (score <= 50) {
-            // 10 to 20 seconds
             time = 10000 + Math.random() * 10000;
         } else if (score <= 100) {
-            // 20 to 30 seconds
             time = 20000 + Math.random() * 10000;
         } else {
-            // 30 to 60 seconds (1 minute)
             time = 30000 + Math.random() * 30000;
         }
 
@@ -423,22 +423,15 @@ const Level5: React.FC<{
         let gaborCountThisTurn = 0;
         const score = totalScoreRef.current;
 
-        // Determine if top patch appears and its type
         if (Math.random() > 0.3) {
             const type = Math.random() > 0.5 ? 'gabor' : 'fake';
             if (type === 'gabor') gaborCountThisTurn++;
             newPatches.top = { id: `side-top-${Date.now()}`, type, size: Math.random() * 50 + 40 };
         }
 
-        // Determine if bottom patch appears and its type
         if (Math.random() > 0.3) {
             let type = Math.random() > 0.5 ? 'gabor' : 'fake';
-            
-            // If score is <= 50 and top patch is already a gabor, bottom cannot be gabor.
-            if (score <= 50 && newPatches.top?.type === 'gabor') {
-                type = 'fake';
-            }
-            
+            if (score <= 50 && newPatches.top?.type === 'gabor') type = 'fake';
             if (type === 'gabor') gaborCountThisTurn++;
             newPatches.bottom = { id: `side-bottom-${Date.now()}`, type, size: Math.random() * 50 + 40 };
         }
@@ -446,25 +439,36 @@ const Level5: React.FC<{
         setGaborOnSideCount(prev => prev + gaborCountThisTurn);
         setSidePatches(newPatches);
     }, []);
+    
+    const resumeGameFromPause = useCallback((options?: { delayPeripheral?: number }) => {
+        const { delayPeripheral = 0 } = options || {};
 
-    const resumeGame = useCallback(() => {
+        setGameState('playing');
+        scheduleQuiz();
+
+        if (ecgPatchRefreshRef.current) clearInterval(ecgPatchRefreshRef.current);
+        ecgPatchRefreshRef.current = window.setInterval(() => {
+            generateNewPatches();
+        }, 5000);
+        
+        if (gameTickRef.current) clearInterval(gameTickRef.current);
+
+        setTimeout(() => {
+            generateSidePatches();
+            gameTickRef.current = window.setInterval(() => {
+                setContrast(prev => Math.max(0.1, prev - 0.005));
+                generateSidePatches();
+            }, 3000);
+        }, delayPeripheral);
+    }, [scheduleQuiz, generateSidePatches, generateNewPatches]);
+
+    const closeQuizAndReset = useCallback(() => {
         setIsQuizVisible(false);
         setQuizFeedback('none');
         setQuizInputValue("");
         setGaborOnSideCount(0);
         setLastQuizAttempt(null);
-        setGameState('playing');
-        scheduleQuiz();
-        
-        gameTickRef.current = window.setInterval(() => {
-            setContrast(prev => Math.max(0.1, prev - 0.005));
-            generateSidePatches();
-        }, 3000);
-    
-        ecgPatchRefreshRef.current = window.setInterval(() => {
-            generateNewPatches();
-        }, 5000);
-    }, [scheduleQuiz, generateSidePatches, generateNewPatches]);
+    }, []);
 
     const startGame = useCallback(() => {
         setEcgScore(0);
@@ -525,7 +529,9 @@ const Level5: React.FC<{
 
         if (isCorrect) {
             setQuizScore(prev => prev + 1);
-            resumeGame();
+            closeQuizAndReset();
+            setSidePatches({ top: null, bottom: null });
+            resumeGameFromPause({ delayPeripheral: 1000 });
         } else {
             setLastQuizAttempt({ userAnswer, correctAnswer: gaborOnSideCount });
             setQuizLives(prev => Math.max(0, prev - 1));
@@ -548,6 +554,21 @@ const Level5: React.FC<{
             return <div style={{...style, width: patch.size, height: patch.size, backgroundColor: 'grey', borderRadius: '50%'}} />;
         }
     };
+    
+    const handleExitRequest = useCallback(() => {
+      setGameState('pausedManually');
+      setShowExitConfirm(true);
+    }, []);
+  
+    const handleConfirmExit = useCallback(() => {
+      setShowExitConfirm(false);
+      setCurrentPage('home');
+    }, [setCurrentPage]);
+  
+    const handleCancelExit = useCallback(() => {
+      setShowExitConfirm(false);
+      setGameState('playing'); // Or resume previous state
+    }, []);
 
     return (
         <div className="flex flex-col h-screen w-screen bg-black font-sans">
@@ -618,7 +639,7 @@ const Level5: React.FC<{
             </div>
             
             <button
-                onClick={() => setCurrentPage('home')}
+                onClick={handleExitRequest}
                 className="absolute bottom-4 right-4 bg-white/80 text-cyan-600 p-3 rounded-full shadow-lg z-20 transition transform hover:scale-110"
                 aria-label="Home"
             >
@@ -659,26 +680,22 @@ const Level5: React.FC<{
                             )}
                             <p className="text-slate-300 mb-6">Take a moment before you continue.</p>
                             <button 
-                                onClick={resumeGame} 
+                                onClick={() => { closeQuizAndReset(); resumeGameFromPause(); }}
                                 className="mb-6 w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-lg transition"
                             >
                                 Continue
                             </button>
                             <div className="flex justify-center gap-8">
                                 <button 
-                                    onClick={() => {
-                                        setGameOverReason('quiz');
-                                        setGameState('gameOver');
-                                        setIsQuizVisible(false);
-                                    }}
-                                    className="flex flex-col items-center text-slate-400 hover:text-rose-400 transition"
-                                    aria-label="Stop Game"
+                                    onClick={() => setGameState('pausedManually')}
+                                    className="flex flex-col items-center text-slate-400 hover:text-cyan-400 transition"
+                                    aria-label="Pause Game"
                                 >
-                                    <XCircleIcon className="w-10 h-10" />
-                                    <span className="text-xs mt-1 font-semibold">Stop</span>
+                                    <PauseIcon className="w-10 h-10" />
+                                    <span className="text-xs mt-1 font-semibold">Pause</span>
                                 </button>
                                 <button 
-                                    onClick={() => setCurrentPage('home')}
+                                    onClick={handleExitRequest}
                                     className="flex flex-col items-center text-slate-400 hover:text-white transition"
                                     aria-label="Exit to Home"
                                 >
@@ -724,6 +741,26 @@ const Level5: React.FC<{
                 </div>
             )}
 
+            {gameState === 'pausedManually' && !showExitConfirm && (
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-40 flex items-center justify-center">
+                    <div className="bg-slate-800 text-white p-8 rounded-2xl shadow-lg border border-cyan-500 w-full max-w-sm text-center">
+                        <h2 className="text-3xl font-bold mb-6 text-cyan-400">Game Paused</h2>
+                        <button 
+                            onClick={() => resumeGameFromPause()}
+                            className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-lg transition flex items-center justify-center text-lg gap-2"
+                        >
+                            <PlayIcon className="w-6 h-6" /> Resume
+                        </button>
+                        <button 
+                            onClick={handleExitRequest} 
+                            className="mt-4 w-full bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 rounded-lg transition"
+                        >
+                            Exit to Main Menu
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {gameState === 'gameOver' && (
                 <div className="absolute inset-0 bg-black/90 z-30 flex items-center justify-center">
                     <div className="bg-slate-800 text-white p-8 rounded-2xl shadow-lg border border-rose-500 w-full max-w-sm text-center">
@@ -742,6 +779,15 @@ const Level5: React.FC<{
                     </div>
                 </div>
             )}
+            
+            <ConfirmationModal
+              isOpen={showExitConfirm}
+              title="Confirm Exit"
+              message="Are you sure you want to exit?"
+              onConfirm={handleConfirmExit}
+              onCancel={handleCancelExit}
+              confirmText="Exit"
+            />
 
         </div>
     );

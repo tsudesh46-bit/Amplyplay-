@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Page } from '../../types';
 import { RetryIcon, HomeIcon } from '../ui/Icons';
+import ConfirmationModal from '../ConfirmationModal';
 
 // --- Constants ---
 const GRID_SIZE = 20;
@@ -38,6 +38,8 @@ const Level6: React.FC<{
   const [direction, setDirection] = useState<'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | null>(null);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
+  const [isConfirmingExit, setIsConfirmingExit] = useState(false);
+  const [isPausedForExit, setIsPausedForExit] = useState(false);
 
   const gameSpeed = Math.max(MAX_SPEED, INITIAL_SPEED - Math.floor(score / 2) * SPEED_INCREMENT);
 
@@ -94,7 +96,7 @@ const Level6: React.FC<{
 
   // Main game loop
   useEffect(() => {
-    if (gameState !== 'playing' || !direction) return;
+    if (gameState !== 'playing' || !direction || isPausedForExit) return;
 
     const gameInterval = setInterval(() => {
       setSnake(prevSnake => {
@@ -130,7 +132,7 @@ const Level6: React.FC<{
     }, gameSpeed);
 
     return () => clearInterval(gameInterval);
-  }, [gameState, direction, gameSpeed, food, generateFood, score, highScore, saveLevelCompletion]);
+  }, [gameState, direction, gameSpeed, food, generateFood, score, highScore, saveLevelCompletion, isPausedForExit]);
   
   // Handle game board resizing
   useEffect(() => {
@@ -151,6 +153,22 @@ const Level6: React.FC<{
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  const handleHomeClick = () => {
+    setIsPausedForExit(true);
+    setIsConfirmingExit(true);
+  };
+
+  const handleConfirmExit = () => {
+    setIsPausedForExit(false);
+    setIsConfirmingExit(false);
+    setCurrentPage('home');
+  };
+
+  const handleCancelExit = () => {
+    setIsPausedForExit(false);
+    setIsConfirmingExit(false);
+  };
 
   const renderOverlay = () => {
     const commonClasses = "absolute inset-0 bg-white/50 backdrop-blur-sm flex flex-col items-center justify-center text-center z-10 p-4 font-pixel rounded-md";
@@ -228,9 +246,18 @@ const Level6: React.FC<{
         </div>
       </main>
 
-      <button onClick={() => setCurrentPage('home')} className="absolute bottom-4 right-4 bg-white/80 text-cyan-600 p-3 rounded-full shadow-lg z-20 transition transform hover:scale-110" aria-label="Home">
+      <button onClick={handleHomeClick} className="absolute bottom-4 right-4 bg-white/80 text-cyan-600 p-3 rounded-full shadow-lg z-20 transition transform hover:scale-110" aria-label="Home">
           <HomeIcon className="w-8 h-8"/>
       </button>
+
+      <ConfirmationModal
+        isOpen={isConfirmingExit}
+        title="Confirm Exit"
+        message="Are you sure you want to return to the main menu?"
+        onConfirm={handleConfirmExit}
+        onCancel={handleCancelExit}
+        confirmText="Exit"
+      />
     </div>
   );
 };

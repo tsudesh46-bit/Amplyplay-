@@ -1,8 +1,8 @@
-
-import React from 'react';
+import React, { useState } from 'react';
 import { Page, CompletedLevels } from '../types';
 import { TOTAL_LEVELS } from '../constants';
 import { HomeIcon, StarIcon } from './ui/Icons';
+import ConfirmationModal from './ConfirmationModal';
 
 interface PerformancePageProps {
   setCurrentPage: (page: Page) => void;
@@ -10,7 +10,21 @@ interface PerformancePageProps {
 }
 
 const PerformancePage: React.FC<PerformancePageProps> = ({ setCurrentPage, completedLevels }) => {
+  const [isConfirmingExit, setIsConfirmingExit] = useState(false);
   const levels = Array.from({ length: TOTAL_LEVELS }, (_, i) => i + 1);
+
+  const handleHomeClick = () => {
+    setIsConfirmingExit(true);
+  };
+
+  const handleConfirmExit = () => {
+    setIsConfirmingExit(false);
+    setCurrentPage('home');
+  };
+
+  const handleCancelExit = () => {
+    setIsConfirmingExit(false);
+  };
 
   return (
     <div className="relative min-h-screen bg-slate-50 flex flex-col items-center p-4 sm:p-6">
@@ -54,12 +68,21 @@ const PerformancePage: React.FC<PerformancePageProps> = ({ setCurrentPage, compl
       </div>
 
       <button
-        onClick={() => setCurrentPage('home')}
+        onClick={handleHomeClick}
         className="absolute bottom-4 right-4 bg-white text-cyan-600 p-4 rounded-full shadow-lg transition duration-300 ease-in-out transform hover:scale-110 hover:-translate-y-1 focus:outline-none focus:ring-4 focus:ring-cyan-300"
         aria-label="Home"
       >
         <HomeIcon />
       </button>
+
+      <ConfirmationModal
+        isOpen={isConfirmingExit}
+        title="Confirm Exit"
+        message="Are you sure you want to return to the main menu?"
+        onConfirm={handleConfirmExit}
+        onCancel={handleCancelExit}
+        confirmText="Exit"
+      />
     </div>
   );
 };

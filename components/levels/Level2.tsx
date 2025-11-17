@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Page } from '../../types';
+import { NextIcon, RetryIcon } from '../ui/Icons';
+import ConfirmationModal from '../ConfirmationModal';
 
 // Helper for Gabor style, replacing GaborText component for this level
 const getDynamicGaborStyle = (isCorrect: boolean, contrast: number, fontSize: number): React.CSSProperties => {
@@ -52,22 +54,37 @@ const HomeButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
 
 const text3DStyle = { textShadow: '2px 2px 4px rgba(0,0,0,0.2)' };
 
-// Star Reward Component
-const StarReward: React.FC<{ show: boolean }> = ({ show }) => {
+// Fireworks Reward Component
+const FireworksReward: React.FC<{ show: boolean }> = ({ show }) => {
   if (!show) return null;
+  const particles = Array.from({ length: 40 });
+  const radius = 200;
   return (
-    <div className="star-reward-container">
-      <div className="star-popup">
-        <svg fill="currentColor" viewBox="0 0 20 20">
-          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-        </svg>
-      </div>
+    <div className="fireworks-container">
+      <div className="central-star">🌟</div>
+      {particles.map((_, i) => {
+        const angle = (i / particles.length) * 360;
+        const randomRadius = radius * (0.8 + Math.random() * 0.4);
+        const x = Math.cos(angle * Math.PI / 180) * randomRadius;
+        const y = Math.sin(angle * Math.PI / 180) * randomRadius;
+        return (
+          <div
+            key={i}
+            className="particle"
+            style={{
+              '--x': `${x}px`,
+              '--y': `${y}px`,
+              animationDelay: `${Math.random() * 0.3}s`,
+            } as React.CSSProperties}
+          />
+        );
+      })}
     </div>
   );
 };
 
 // Local LevelComponent, replacing LevelLayout for this level
-const LevelComponent: React.FC<{ levelId: number, children: React.ReactNode, setCurrentPage: (page: Page) => void }> = ({ levelId, children, setCurrentPage }) => (
+const LevelComponent: React.FC<{ levelId: number, children: React.ReactNode, onHomeClick: () => void }> = ({ levelId, children, onHomeClick }) => (
     <div className="relative min-h-screen bg-white flex flex-col items-center p-4 overflow-hidden">
         <h2
             className="text-4xl font-bold text-slate-700 mb-4 mt-4"
@@ -76,7 +93,7 @@ const LevelComponent: React.FC<{ levelId: number, children: React.ReactNode, set
             Level {String(levelId).padStart(2, '0')}
         </h2>
         {children}
-        <HomeButton onClick={() => setCurrentPage('home')} />
+        <HomeButton onClick={onHomeClick} />
     </div>
 );
 
@@ -94,16 +111,18 @@ const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) 
     const [correctIndex, setCorrectIndex] = useState(0);
     const [awardedStars, setAwardedStars] = useState(0);
     const [showStarAnimation, setShowStarAnimation] = useState(false);
+    const [isConfirmingExit, setIsConfirmingExit] = useState(false);
 
     const MAX_NUMBER = 101;
     const START_FONT_SIZE = 100, END_FONT_SIZE = 12;
     const FONT_SIZE_DECREMENT = (START_FONT_SIZE - END_FONT_SIZE) / (MAX_NUMBER - 1);
     const START_CONTRAST = 1.0, END_CONTRAST = 0.2;
     const CONTRAST_DECREMENT = (START_CONTRAST - END_CONTRAST) / (MAX_NUMBER - 1);
+    const totalQuestions = MAX_NUMBER - 1;
 
     const currentFontSize = Math.max(END_FONT_SIZE, START_FONT_SIZE - (currentNumber - 1) * FONT_SIZE_DECREMENT);
     const currentContrast = Math.max(END_CONTRAST, START_CONTRAST - (currentNumber - 1) * CONTRAST_DECREMENT);
-    const progress = currentNumber >= MAX_NUMBER - 1 ? 100 : ((currentNumber - 1) / (MAX_NUMBER - 2)) * 100;
+    const progress = (correctCount / totalQuestions) * 100;
 
     const generateNumberLayout = useCallback(() => {
         const fixedPositions = [
@@ -126,7 +145,6 @@ const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) 
     useEffect(() => {
         if (gameState !== 'playing') return;
 
-        const totalQuestions = MAX_NUMBER - 1;
         const percentage = (correctCount / totalQuestions) * 100;
 
         let starsEarned = 0;
@@ -141,7 +159,7 @@ const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) 
             setShowStarAnimation(true);
             setTimeout(() => setShowStarAnimation(false), 1500);
         }
-    }, [correctCount, awardedStars, gameState]);
+    }, [correctCount, awardedStars, gameState, totalQuestions]);
 
     const handleNumberClick = (isCorrect: boolean) => {
         if (gameState !== 'playing') return;
@@ -153,17 +171,27 @@ const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) 
         setIncorrectCount(newIncorrectCount);
 
         if (currentNumber >= MAX_NUMBER - 1) {
-            const totalQuestions = MAX_NUMBER - 1;
+            const isSuccess = newIncorrectCount === 0;
             let stars = 0;
-            if (newIncorrectCount === 0) {
+            if (isSuccess) {
                 stars = 3;
             } else {
                 const percentage = (newCorrectCount / totalQuestions) * 100;
                 if (percentage > 60) stars = 2;
                 else if (percentage > 30) stars = 1;
             }
-            saveLevelCompletion('level2', stars);
-            setGameState(newIncorrectCount === 0 ? 'success' : 'fail');
+
+            if (isSuccess) {
+                setAwardedStars(3);
+                setShowStarAnimation(true);
+                setTimeout(() => {
+                    saveLevelCompletion('level2', stars);
+                    setGameState('success');
+                }, 1500);
+            } else {
+                saveLevelCompletion('level2', stars);
+                setGameState('fail');
+            }
         } else {
             setCurrentNumber(currentNumber + 1);
         }
@@ -177,66 +205,80 @@ const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) 
         setGameState('playing');
     };
     
+    const handleHomeClick = () => {
+        setIsConfirmingExit(true);
+    };
+    
+    const handleConfirmExit = () => {
+        setIsConfirmingExit(false);
+        setCurrentPage('home');
+    };
+
+    const handleCancelExit = () => {
+        setIsConfirmingExit(false);
+    };
+
     const buttonText3DStyle = { textShadow: '1px 1px 2px rgba(0,0,0,0.4)' };
 
     const renderGame = () => {
         if (currentNumber > MAX_NUMBER - 1 || gameState !== 'playing') {
-             const isSuccess = gameState === 'success';
+             const isSuccess = gameState === 'success' || (gameState !== 'fail' && incorrectCount === 0);
              return (
                 <div className="flex flex-col items-center justify-center h-full text-center">
                     <div className="bg-white p-8 rounded-xl shadow-2xl max-w-md w-full mx-4 border-t-4 border-cyan-500">
                         <div className="mb-6">
                             {isSuccess ? (
                                 <div className="text-teal-500 mb-4">
-                                    <svg className="w-16 h-16 mx-auto" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                                    <svg className="w-16 h-16 mx-auto" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path></svg>
                                 </div>
                             ) : (
                                 <div className="text-rose-500 mb-4">
-                                    <svg className="w-16 h-16 mx-auto" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
+                                    <svg className="w-16 h-16 mx-auto" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"></path></svg>
                                 </div>
                             )}
                         </div>
-                        <h2 className={`text-3xl font-bold mb-3 ${isSuccess ? 'text-teal-600' : 'text-rose-600'}`} style={text3DStyle}>
-                            {isSuccess ? 'සුබ පැතුම්!' : 'නැවත උත්සාහ කරන්න'}
+                        <h2 style={text3DStyle} className={`text-3xl font-bold mb-3 ${isSuccess ? 'text-teal-600' : 'text-rose-600'}`}>
+                            {isSuccess ? 'Level Complete!' : 'Try Again'}
                         </h2>
-                        <p className="text-lg text-gray-600 mb-6">
-                            {isSuccess ? 'අදියර සාර්ථකව නිම කරන ලදී!' : 'ඔබට මීළඟ වතාවේදී මීට වඩා හොඳින් කළ හැකියි!'}
-                        </p>
-                        <div className="bg-gray-50 p-4 rounded-lg mb-6">
-                            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">ප්‍රතිඵල</h3>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="text-center"><div className="text-2xl font-bold text-teal-600">{correctCount}</div><div className="text-sm text-gray-500">නිවැරදියි</div></div>
-                                <div className="text-center"><div className="text-2xl font-bold text-rose-600">{incorrectCount}</div><div className="text-sm text-gray-500">වැරදියි</div></div>
+                        <div className="grid grid-cols-2 gap-4 my-6 bg-slate-50 p-4 rounded-lg">
+                            <div className="text-center">
+                                <p className="text-3xl font-bold text-teal-600">{correctCount}</p>
+                                <p className="text-sm text-slate-500">Correct</p>
+                            </div>
+                            <div className="text-center">
+                                <p className="text-3xl font-bold text-rose-600">{incorrectCount}</p>
+                                <p className="text-sm text-slate-500">Incorrect</p>
                             </div>
                         </div>
-                        <button onClick={isSuccess ? () => setCurrentPage('level3') : resetLevel}
-                            className={`w-full py-3 px-6 rounded-lg font-semibold text-white transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-4 ${isSuccess ? 'bg-cyan-600 hover:bg-cyan-700 focus:ring-cyan-300' : 'bg-rose-500 hover:bg-rose-600 focus:ring-rose-300'}`} style={buttonText3DStyle}>
-                            {isSuccess ? (<span className="flex items-center justify-center">මීළඟ අදියර<svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg></span>) : (<span className="flex items-center justify-center"><svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>නැවත උත්සාහ කරන්න</span>)}
+                        <button
+                            onClick={isSuccess ? () => setCurrentPage('level3') : resetLevel}
+                            style={buttonText3DStyle}
+                            className={`w-full py-3 px-6 rounded-lg font-semibold text-white transition duration-300 ease-in-out transform hover:scale-105 ${isSuccess ? 'bg-cyan-600 hover:bg-cyan-700' : 'bg-rose-500 hover:bg-rose-600'}`}
+                        >
+                           {isSuccess ? (
+                                <span className="flex items-center justify-center">Next Level <NextIcon /></span>
+                           ) : (
+                                <span className="flex items-center justify-center"><RetryIcon /> Try Again</span>
+                           )}
                         </button>
                     </div>
                 </div>
             );
         }
-
-        if (numberPositions.length < 4) {
-            return <div className="flex-grow flex items-center justify-center">Loading...</div>;
-        }
-
+        
         return (
-            <div className="relative w-full h-full flex-grow">
+            <div className="flex-grow w-full relative">
                 {numberPositions.map((pos, index) => (
                     <div
                         key={index}
-                        onClick={() => handleNumberClick(index === correctIndex)}
-                        className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer"
                         style={{
-                            ...pos,
-                            ...getDynamicGaborStyle(
-                                index === correctIndex,
-                                currentContrast,
-                                currentFontSize
-                            ),
+                            position: 'absolute',
+                            top: pos.top,
+                            left: pos.left,
+                            transform: 'translate(-50%, -50%)',
+                            ...getDynamicGaborStyle(index === correctIndex, currentContrast, currentFontSize),
                         }}
+                        onClick={() => handleNumberClick(index === correctIndex)}
                     >
                         {currentNumber}
                     </div>
@@ -246,13 +288,11 @@ const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) 
     };
 
     return (
-        <LevelComponent levelId={2} setCurrentPage={setCurrentPage}>
-            <StarReward show={showStarAnimation} />
-            <div className="flex-grow flex flex-col items-center justify-center w-full">
-                {renderGame()}
-            </div>
+        <LevelComponent levelId={2} onHomeClick={handleHomeClick}>
+            <FireworksReward show={showStarAnimation} />
+            {renderGame()}
             {gameState === 'playing' && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-full max-w-md px-4">
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-full max-w-sm px-4">
                     <div className="mb-2">
                         <div className="flex justify-between items-center mb-1 text-slate-600">
                             <span className="text-sm font-semibold">Progress</span>
@@ -262,18 +302,20 @@ const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) 
                             <div className="progress-bar-fill-thin" style={{ width: `${progress}%` }}></div>
                         </div>
                     </div>
-                    <div className="flex justify-center space-x-8 mt-2">
-                        <div className="bg-teal-500 text-white p-4 rounded-lg shadow-md flex-1 text-center font-bold text-lg" style={buttonText3DStyle}>
-                            <p className="mb-1">නිවැරදියි</p>
-                            <p>{correctCount}</p>
-                        </div>
-                        <div className="bg-rose-500 text-white p-4 rounded-lg shadow-md flex-1 text-center font-bold text-lg" style={buttonText3DStyle}>
-                            <p className="mb-1">වැරදියි</p>
-                            <p>{incorrectCount}</p>
-                        </div>
+                    <div className="flex justify-center space-x-8">
+                        <div className="bg-teal-500 text-white p-3 rounded-lg shadow-md flex-1 text-center font-bold text-lg">Correct: {correctCount}</div>
+                        <div className="bg-rose-500 text-white p-3 rounded-lg shadow-md flex-1 text-center font-bold text-lg">Incorrect: {incorrectCount}</div>
                     </div>
                 </div>
             )}
+             <ConfirmationModal
+                isOpen={isConfirmingExit}
+                title="Confirm Exit"
+                message="Are you sure you want to return to the main menu?"
+                onConfirm={handleConfirmExit}
+                onCancel={handleCancelExit}
+                confirmText="Exit"
+            />
         </LevelComponent>
     );
 };
