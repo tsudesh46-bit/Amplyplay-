@@ -11,7 +11,8 @@ interface HomePageProps {
 }
 
 const LevelButton: React.FC<{level: number, setCurrentPage: (page: Page) => void, stars: number}> = ({ level, setCurrentPage, stars }) => {
-    const starColor = level === 1 && stars === 3 ? "text-red-500" : "text-yellow-400";
+    // Logic: 3 stars = Red, 1 or 2 stars = Yellow
+    const starColor = stars === 3 ? "text-red-500" : "text-yellow-400";
 
     return (
         <button

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Page, CompletedLevels } from '../types';
 import { TOTAL_LEVELS } from '../constants';
@@ -69,10 +70,14 @@ const PerformancePage: React.FC<PerformancePageProps> = ({ setCurrentPage, compl
 
       <button
         onClick={handleHomeClick}
-        className="absolute bottom-4 right-4 bg-white text-cyan-600 p-4 rounded-full shadow-lg transition duration-300 ease-in-out transform hover:scale-110 hover:-translate-y-1 focus:outline-none focus:ring-4 focus:ring-cyan-300"
+        className="absolute bottom-4 right-4 group w-14 h-14 rounded-full flex items-center justify-center bg-white shadow-xl transition-transform hover:scale-110 focus:outline-none z-30"
         aria-label="Home"
       >
-        <HomeIcon />
+         {/* Inner Ring */}
+        <span className="absolute inset-0 rounded-full border-2 border-cyan-200 opacity-70 group-hover:border-cyan-500 group-hover:opacity-100 transition-all duration-300"></span>
+        {/* Outer Pulse Ring */}
+        <span className="absolute -inset-1 rounded-full border border-cyan-100 opacity-40 group-hover:scale-110 group-hover:opacity-60 transition-all duration-500 ease-out"></span>
+        <HomeIcon className="w-8 h-8 text-cyan-600 group-hover:text-cyan-700 transition-colors" />
       </button>
 
       <ConfirmationModal
