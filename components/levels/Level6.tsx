@@ -1,18 +1,19 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Page } from '../../types';
-import { RetryIcon, HomeIcon, NextIcon } from '../ui/Icons';
+import { RetryIcon, HomeIcon, NextIcon, StarIcon, PlayIcon } from '../ui/Icons';
 import ConfirmationModal from '../ConfirmationModal';
 import GaborCircle from '../GaborCircle';
 
 // --- Constants ---
-const INITIAL_SPEED = 800; 
-const MIN_SPEED = 150;      
-const SPEED_DECREMENT = 15; 
+const MIN_SPEED = 60;      
+const SPEED_DECREMENT = 2; // Speed increase per point scored within a level
 
 const TOTAL_SUB_LEVELS = 100;
-const TARGET_CELL_SIZE = 60; 
-const BORDER_THICKNESS = 10;
+const BORDER_THICKNESS = 4;
+
+// Approximation: 96DPI -> 1cm is ~38px. 2cm is ~76px.
+const BASE_CELL_SIZE_PX = 76; 
 
 // --- Helper Components ---
 
@@ -34,9 +35,15 @@ const RingHomeButton: React.FC<{ onClick: () => void, className?: string }> = ({
 interface Distractor {
     x: number;
     y: number;
-    sizePercent: number;
+    shape: 'circle' | 'square';
     color: string;
     id: string;
+}
+
+interface Target {
+    x: number;
+    y: number;
+    shape: 'circle' | 'square';
 }
 
 interface SnakeGameProps {
@@ -47,17 +54,34 @@ interface SnakeGameProps {
     saveMainProgress: (stars: number) => void;
 }
 
+const getTargetScore = (level: number) => {
+    if (level <= 20) return 100;
+    if (level <= 50) return 200;
+    if (level <= 70) return 500;
+    if (level <= 90) return 700;
+    return 100; 
+};
+
+// Calculate cell size. Level 1 starts at ~2cm (76px). 
+// As levels progress, size decreases slightly to increase difficulty, but stays large for low vision.
+const getCellSizeForLevel = (level: number) => {
+    // Range: Starts at 76px, drops to about 40px at level 100.
+    return Math.floor(Math.max(40, BASE_CELL_SIZE_PX - ((level - 1) * 0.36)));
+};
+
 const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, onComplete, saveMainProgress }) => {
     const gameContainerRef = useRef<HTMLDivElement>(null);
     const [gridCols, setGridCols] = useState(10);
     const [gridRows, setGridRows] = useState(10);
-    const [cellSize, setCellSize] = useState(TARGET_CELL_SIZE);
     
-    const [gameState, setGameState] = useState<'start' | 'playing' | 'gameOver'>('start');
+    // Dynamic cell size based on acuity level
+    const cellSize = getCellSizeForLevel(subLevel);
+    
+    const [gameState, setGameState] = useState<'start' | 'playing' | 'gameOver' | 'levelComplete'>('start');
     const [isExitModalOpen, setIsExitModalOpen] = useState(false);
     
-    const [snake, setSnake] = useState<{x: number, y: number}[]>([{ x: 3, y: 3 }]);
-    const [target, setTarget] = useState({ x: 1, y: 1 });
+    const [snake, setSnake] = useState<{x: number, y: number}[]>([{ x: 5, y: 5 }]);
+    const [target, setTarget] = useState<Target>({ x: 2, y: 2, shape: 'circle' });
     const [distractors, setDistractors] = useState<Distractor[]>([]);
     
     const [direction, setDirection] = useState<'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | null>(null);
@@ -69,7 +93,19 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
 
     useEffect(() => { directionRef.current = direction; }, [direction]);
 
-    const currentSpeed = Math.max(MIN_SPEED, INITIAL_SPEED - (score * SPEED_DECREMENT));
+    // Calculate start speed based on level using useMemo to ensure it updates when level changes
+    const startSpeed = useMemo(() => {
+        if (subLevel <= 5) {
+            // Level 1 starts at 800ms (Very Slow)
+            return 800 - ((subLevel - 1) * 50);
+        } else {
+            return Math.max(150, 550 - ((subLevel - 6) * 10));
+        }
+    }, [subLevel]);
+
+    const currentSpeed = Math.max(MIN_SPEED, startSpeed - (score * SPEED_DECREMENT));
+    
+    const targetScore = getTargetScore(subLevel);
 
     const generateLevelItems = useCallback((currentSnake: {x: number, y: number}[], cols: number, rows: number, currentScore: number) => {
         const occupied = new Set<string>();
@@ -88,8 +124,21 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
             return { x, y };
         };
 
-        const newTarget = getRandomPos();
-        const numDistractors = 1 + Math.floor(currentScore / 5); 
+        const newTargetPos = getRandomPos();
+        // Randomly assign shape: Gabor Circle or Gabor Square
+        const newTarget: Target = {
+            ...newTargetPos,
+            shape: Math.random() > 0.5 ? 'circle' : 'square'
+        };
+        
+        // Distractor Logic
+        let numDistractors = 0;
+        if (subLevel === 1) numDistractors = 1;
+        else if (subLevel === 2) numDistractors = 2;
+        else if (subLevel === 3) numDistractors = 3;
+        else numDistractors = 3 + Math.floor((subLevel - 3) / 5);
+
+        if (currentScore > 50) numDistractors += 1;
         
         const newDistractors: Distractor[] = [];
         for (let i = 0; i < numDistractors; i++) {
@@ -97,42 +146,47 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
             newDistractors.push({
                 x: pos.x,
                 y: pos.y,
-                sizePercent: 0.7 + Math.random() * 0.3,
-                color: Math.random() > 0.5 ? '#000000' : '#333333',
+                shape: Math.random() > 0.5 ? 'circle' : 'square',
+                color: '#4b5563', // Solid grey
                 id: `d-${Date.now()}-${i}`
             });
         }
         return { target: newTarget, distractors: newDistractors };
-    }, []);
+    }, [subLevel]);
 
     const initGrid = useCallback(() => {
         if (gameContainerRef.current) {
             const width = gameContainerRef.current.clientWidth - (BORDER_THICKNESS * 2);
             const height = gameContainerRef.current.clientHeight - (BORDER_THICKNESS * 2);
-            let cols = Math.floor(width / TARGET_CELL_SIZE);
-            let rows = Math.floor(height / TARGET_CELL_SIZE);
+            let cols = Math.floor(width / cellSize);
+            let rows = Math.floor(height / cellSize);
+            // Ensure minimum play area
             cols = Math.max(5, cols);
             rows = Math.max(5, rows);
             setGridCols(cols);
             setGridRows(rows);
-            setCellSize(TARGET_CELL_SIZE);
             return { cols, rows };
         }
         return { cols: 10, rows: 10 };
-    }, []);
+    }, [cellSize]);
 
     const startGame = useCallback(() => {
         const { cols, rows } = initGrid();
+        // Force Center Start
         const centerX = Math.floor(cols / 2);
         const centerY = Math.floor(rows / 2);
         const startSnake = [{ x: centerX, y: centerY }];
+        
         const items = generateLevelItems(startSnake, cols, rows, 0);
         
         setSnake(startSnake);
         setTarget(items.target);
         setDistractors(items.distractors);
-        setDirection('UP'); 
-        directionRef.current = 'UP';
+        
+        // Initialize direction to null so snake waits for input
+        setDirection(null); 
+        directionRef.current = null;
+        
         if (score > highScore) setHighScore(score);
         setScore(0);
         setGameState('playing');
@@ -142,13 +196,13 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
-            if ((gameState === 'start' || gameState === 'gameOver') && e.key.includes('Arrow')) {
-                startGame();
-                return;
-            }
+            
+            // Explicitly ignore arrow keys if game is not playing. 
             if (gameState !== 'playing' || isPaused || isExitModalOpen) return;
+            
             const key = e.key;
             setDirection(prevDirection => {
+                // If waiting for start (null), allow any valid direction
                 switch (key) {
                 case 'ArrowUp': return prevDirection !== 'DOWN' ? 'UP' : prevDirection;
                 case 'ArrowDown': return prevDirection !== 'UP' ? 'DOWN' : prevDirection;
@@ -160,31 +214,41 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [gameState, startGame, isPaused, isExitModalOpen]);
+    }, [gameState, isPaused, isExitModalOpen]); 
 
     const handleInput = useCallback((clientX: number, clientY: number) => {
-        if (gameState === 'start' || gameState === 'gameOver') {
-            startGame();
-            return;
-        }
         if (gameState !== 'playing' || isPaused || isExitModalOpen) return;
+
         if (gameContainerRef.current) {
             const rect = gameContainerRef.current.getBoundingClientRect();
+            // We use the Head position to determine turn relative to snake, 
+            // but for simplicity in grid tap, we can just use center of screen or center of snake.
+            // Using center of screen is more reliable for "D-Pad" style logic zones.
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
+            
             const deltaX = clientX - centerX;
             const deltaY = clientY - centerY;
             let newDirection = directionRef.current;
+            
             if (Math.abs(deltaX) > Math.abs(deltaY)) {
-                if (deltaX > 0) { if (directionRef.current !== 'LEFT') newDirection = 'RIGHT'; } 
-                else { if (directionRef.current !== 'RIGHT') newDirection = 'LEFT'; }
+                if (deltaX > 0) { 
+                    if (directionRef.current !== 'LEFT') newDirection = 'RIGHT'; 
+                } 
+                else { 
+                    if (directionRef.current !== 'RIGHT') newDirection = 'LEFT'; 
+                }
             } else {
-                if (deltaY > 0) { if (directionRef.current !== 'UP') newDirection = 'DOWN'; } 
-                else { if (directionRef.current !== 'DOWN') newDirection = 'UP'; }
+                if (deltaY > 0) { 
+                    if (directionRef.current !== 'UP') newDirection = 'DOWN'; 
+                } 
+                else { 
+                    if (directionRef.current !== 'DOWN') newDirection = 'UP'; 
+                }
             }
             if (newDirection && newDirection !== directionRef.current) setDirection(newDirection);
         }
-    }, [gameState, isPaused, isExitModalOpen, startGame]);
+    }, [gameState, isPaused, isExitModalOpen]);
 
     const onPointerDown = (e: React.PointerEvent) => {
         const target = e.target as HTMLElement;
@@ -197,7 +261,8 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         if (gameState !== 'playing' || isPaused || isExitModalOpen) return;
         const gameInterval = setInterval(() => {
             const currentDir = directionRef.current;
-            if (!currentDir) return;
+            if (!currentDir) return; // Wait for first input
+            
             setSnake(prevSnake => {
                 const head = prevSnake[0];
                 const next = { ...head };
@@ -216,8 +281,15 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                     return prevSnake;
                 }
                 if (next.x === target.x && next.y === target.y) {
-                    const newScore = score + 1;
+                    const newScore = score + 1; // 1 Mark per food
                     setScore(newScore);
+                    
+                    if (newScore >= targetScore) {
+                        setGameState('levelComplete');
+                        saveMainProgress(3); 
+                        return [next, ...prevSnake];
+                    }
+
                     const newSnake = [next, ...prevSnake]; 
                     const items = generateLevelItems(newSnake, gridCols, gridRows, newScore);
                     setTarget(items.target);
@@ -228,7 +300,7 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
             });
         }, currentSpeed);
         return () => clearInterval(gameInterval);
-    }, [gameState, currentSpeed, target, distractors, score, highScore, saveMainProgress, isPaused, isExitModalOpen, gridCols, gridRows, generateLevelItems]);
+    }, [gameState, currentSpeed, target, distractors, score, highScore, saveMainProgress, isPaused, isExitModalOpen, gridCols, gridRows, generateLevelItems, targetScore]);
 
     useEffect(() => {
         const handleResize = () => initGrid();
@@ -238,43 +310,76 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
     }, [initGrid]);
 
     const renderOverlay = () => {
-        const commonClasses = "absolute inset-0 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center text-center z-40 p-4 font-pixel rounded-md";
-        const textClasses = "text-slate-800";
+        const commonClasses = "absolute inset-0 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center text-center z-40 p-6 font-sans rounded-md border border-slate-800";
+        const textClasses = "text-white";
+        
         if (gameState === 'start') {
             return (
                 <div className={commonClasses}>
-                <h2 className={`text-3xl sm:text-4xl ${textClasses} mb-4`}>LEVEL {subLevel}</h2>
-                <p className={`text-base text-cyan-700 font-sans mb-4 font-bold`}>Keep screen 1m away</p>
-                <div className="flex items-center justify-center gap-4 mb-4">
-                    <div className="flex flex-col items-center">
-                        <div className="flex items-center justify-center bg-slate-100 p-2 rounded">
-                             <div className="w-6 h-6 bg-black rounded-full"></div>
+                    <h2 className={`text-4xl font-bold ${textClasses} mb-2 tracking-tight`}>LEVEL {subLevel}</h2>
+                    <p className={`text-lg text-cyan-400 font-medium mb-8`}>Target Score: {targetScore}</p>
+                    
+                    <div className="flex flex-col gap-4 items-center justify-center mb-10 bg-slate-800/50 p-6 rounded-2xl border border-slate-700 w-full max-w-xs">
+                        <div className="flex items-center justify-around w-full">
+                            <div className="flex flex-col items-center gap-2">
+                                <GaborCircle size={40} contrast={1} onClick={()=>{}} />
+                                <span className="text-xs font-bold text-cyan-300">FIND</span>
+                            </div>
+                            <div className="h-8 w-px bg-slate-600"></div>
+                            <div className="flex flex-col items-center gap-2">
+                                <div style={{width: '40px', height: '40px', backgroundColor: '#4b5563', borderRadius: '50%'}}></div>
+                                <span className="text-xs font-medium text-rose-400">AVOID</span>
+                            </div>
                         </div>
-                        <span className="text-xs font-sans text-slate-500 mt-1">Snake</span>
                     </div>
-                    <span className="text-slate-400">➔</span>
-                    <div className="flex flex-col items-center">
-                        <GaborCircle size={24} contrast={1} onClick={()=>{}} />
-                        <span className="text-xs font-sans text-slate-500 mt-1">Eat</span>
-                    </div>
+                    
+                    <button 
+                        onClick={startGame}
+                        className="group relative px-10 py-4 bg-transparent border-2 border-cyan-400 rounded-full transition-all duration-300 hover:scale-105 hover:bg-cyan-500/10 hover:shadow-[0_0_20px_rgba(34,211,238,0.5)]"
+                    >
+                        <div className="flex items-center justify-center gap-3">
+                            <StarIcon className="w-6 h-6 text-cyan-400 group-hover:text-cyan-200 animate-spin-slow" />
+                            <span className="text-xl font-bold text-cyan-400 group-hover:text-cyan-200 tracking-wider">
+                                START GAME
+                            </span>
+                             <StarIcon className="w-6 h-6 text-cyan-400 group-hover:text-cyan-200 animate-spin-slow" />
+                        </div>
+                    </button>
                 </div>
-                <p className={`text-xl sm:text-2xl ${textClasses}`}>Tap to Start</p>
+            );
+        }
+        if (gameState === 'levelComplete') {
+            return (
+                <div className={commonClasses}>
+                    <h2 className={`text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-cyan-400 mb-6`}>Level Complete!</h2>
+                    <div className="flex gap-2 mb-8 animate-pulse-slow">
+                        <StarIcon className="w-10 h-10 text-yellow-400 drop-shadow-lg" />
+                        <StarIcon className="w-10 h-10 text-yellow-400 drop-shadow-lg" />
+                        <StarIcon className="w-10 h-10 text-yellow-400 drop-shadow-lg" />
+                    </div>
+                    <p className={`${textClasses} text-2xl mb-8`}>Final Score: <span className="font-bold text-cyan-400">{score}</span></p>
+                    <button onClick={() => onComplete(score)} className="group bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white font-bold py-4 px-8 rounded-full transition text-xl flex items-center justify-center gap-3 shadow-lg hover:shadow-cyan-500/30 transform hover:-translate-y-1">
+                        <StarIcon className="w-6 h-6 text-white group-hover:text-yellow-200 animate-spin-slow" />
+                        Next Level 
+                        <NextIcon />
+                        <StarIcon className="w-6 h-6 text-white group-hover:text-yellow-200 animate-spin-slow" />
+                    </button>
                 </div>
             );
         }
         if (gameState === 'gameOver') {
             return (
                 <div className={commonClasses}>
-                    <h2 className={`text-3xl sm:text-4xl ${textClasses} mb-4`}>Game Over</h2>
-                    <div className="bg-slate-800/10 p-4 rounded-md my-6 w-full max-w-xs">
-                    <p className={`${textClasses} text-lg`}>Score: <span className="font-bold">{score}</span></p>
+                    <h2 className={`text-4xl font-bold text-rose-500 mb-6`}>Game Over</h2>
+                    <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl mb-8 w-full max-w-xs">
+                        <p className={`${textClasses} text-lg`}>Score: <span className="font-bold text-white">{score}</span> / {targetScore}</p>
                     </div>
-                    <div className="flex gap-4">
-                        <button onClick={startGame} className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-6 rounded-lg transition text-lg flex items-center justify-center gap-2 shadow-lg">
+                    <div className="flex gap-4 w-full justify-center max-w-sm">
+                        <button onClick={startGame} className="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-lg transition text-lg flex items-center justify-center gap-2 shadow-lg">
                             <RetryIcon /> Retry
                         </button>
-                        <button onClick={() => onComplete(score)} className="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-lg transition text-lg flex items-center justify-center gap-2 shadow-lg">
-                            <NextIcon /> Done
+                        <button onClick={() => setIsExitModalOpen(true)} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-4 rounded-lg transition text-lg flex items-center justify-center gap-2 shadow-lg">
+                            <HomeIcon className="w-6 h-6" /> Menu
                         </button>
                     </div>
                 </div>
@@ -283,73 +388,173 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         return null;
     };
 
-    const gaborStyle = {
-        backgroundImage: `repeating-linear-gradient(45deg, rgba(180, 180, 180, 1), rgba(180, 180, 180, 1) 3px, rgba(80, 80, 80, 1) 3px, rgba(80, 80, 80, 1) 6px)`,
+    // Snake body Gabor pattern
+    const bodyBaseColor = '#60a5fa'; // Blue-400 like color
+    const bodyTexture = `repeating-linear-gradient(45deg, rgba(255,255,255,0.1), rgba(255,255,255,0.1) 2px, transparent 2px, transparent 4px)`;
+    
+    // Food Gabor pattern (High contrast)
+    const foodGaborStyle = {
+        backgroundImage: `repeating-linear-gradient(45deg, #ffffff, #ffffff 2px, #000000 2px, #000000 4px)`,
+        backgroundColor: '#ffffff',
         backgroundSize: '100% 100%',
     };
 
-    const renderSnakeHead = (x: number, y: number) => {
-        let rotation = 0;
-        switch(direction) {
-            case 'UP': rotation = 0; break;
-            case 'RIGHT': rotation = 90; break;
-            case 'DOWN': rotation = 180; break;
-            case 'LEFT': rotation = 270; break;
-        }
-        return (
-            <div className="absolute flex items-center justify-center z-30 transition-all duration-75" style={{ width: `${cellSize}px`, height: `${cellSize}px`, top: `${y * cellSize}px`, left: `${x * cellSize}px`, transform: `rotate(${rotation}deg)` }}>
-                <div className="absolute w-full h-full bg-black/30 rounded-full scale-125 blur-sm"></div>
-                <div className="absolute w-[140%] h-[100%] bg-black rounded-[50%] top-[10%] transition-all"></div>
-                <div className="relative w-[70%] h-[90%] bg-gradient-to-b from-slate-800 to-black rounded-full border border-slate-700 flex flex-col items-center pt-[20%]">
-                     <div className="flex w-full justify-around px-1">
-                         <div className="w-2 h-2 bg-yellow-400 rounded-full shadow-[0_0_4px_yellow]"></div>
-                         <div className="w-2 h-2 bg-yellow-400 rounded-full shadow-[0_0_4px_yellow]"></div>
-                     </div>
-                     <div className="w-2 h-4 bg-slate-700 mt-1 rounded-full opacity-50"></div>
-                </div>
-            </div>
-        );
-    };
-
     return (
-        <div className="flex flex-col h-screen w-full bg-white font-sans select-none overflow-hidden">
-             <header className="w-full p-3 sm:p-4 bg-white shadow-sm z-10 shrink-0 border-b border-slate-200 flex justify-between items-center">
+        <div className="flex flex-col h-screen w-full bg-black font-sans select-none overflow-hidden">
+             <header className="w-full p-3 sm:p-4 bg-slate-900 shadow-sm z-10 shrink-0 border-b border-slate-800 flex justify-between items-center">
                 <div className="flex items-center gap-4">
                     <div style={{ transform: 'scale(0.8)' }}>
                         <RingHomeButton onClick={() => { setIsPaused(true); setIsExitModalOpen(true); }} />
                     </div>
-                    <h1 className="text-xl sm:text-2xl font-bold text-slate-700 font-pixel">LVL {String(subLevel).padStart(2, '0')}</h1>
+                    <h1 className="text-xl sm:text-2xl font-bold text-slate-200 font-sans tracking-wide">LEVEL {String(subLevel).padStart(2, '0')}</h1>
                 </div>
-                <div className="text-center text-slate-700 font-pixel">
-                    <p className="text-xs sm:text-sm font-bold opacity-50">SCORE</p>
-                    <p className="text-lg sm:text-xl font-bold">{String(score).padStart(4, '0')}</p>
+                <div className="text-center text-slate-200 font-sans">
+                    <p className="text-xs sm:text-sm font-bold opacity-50 uppercase tracking-wider">TARGET</p>
+                    <p className="text-lg sm:text-xl font-bold text-cyan-400">{score} / {targetScore}</p>
                 </div>
             </header>
-            <main className="flex-grow flex items-center justify-center w-full h-full overflow-hidden relative touch-none bg-white" onPointerDown={onPointerDown}>
-                <div ref={gameContainerRef} className="w-full h-full flex items-center justify-center relative bg-slate-50">
-                    <div className="relative overflow-hidden pointer-events-auto bg-white" style={{ width: `${gridCols * cellSize}px`, height: `${gridRows * cellSize}px`, border: `${BORDER_THICKNESS}px solid transparent`, borderImage: 'repeating-linear-gradient(45deg, #808080, #808080 5px, #202020 5px, #202020 10px) 1', boxShadow: '0 0 20px rgba(0,0,0,0.2)' }}>
+            <main className="flex-grow flex items-center justify-center w-full h-full overflow-hidden relative touch-none bg-black" onPointerDown={onPointerDown}>
+                <div ref={gameContainerRef} className="w-full h-full flex items-center justify-center relative bg-black">
+                    <div className="relative overflow-hidden pointer-events-auto bg-black" style={{ width: `${gridCols * cellSize}px`, height: `${gridRows * cellSize}px`, border: `${BORDER_THICKNESS}px solid #475569`, boxShadow: '0 0 30px rgba(6,182,212,0.1)' }}>
                         {renderOverlay()}
+                        {/* Faint Grid */}
+                        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: `linear-gradient(#334155 1px, transparent 1px), linear-gradient(90deg, #334155 1px, transparent 1px)`, backgroundSize: `${cellSize}px ${cellSize}px` }}></div>
+
+                        {/* Hint Text when Waiting for Start */}
+                        {gameState === 'playing' && direction === null && (
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
+                                <div className="bg-black/50 text-cyan-400 px-6 py-3 rounded-full animate-pulse backdrop-blur-sm border border-cyan-500/30 text-lg font-bold shadow-[0_0_20px_rgba(34,211,238,0.3)]">
+                                    Tap or Press Arrow Key to Start
+                                </div>
+                            </div>
+                        )}
+
                         {snake.map((segment, index) => {
                             const isHead = index === 0;
-                            if (isHead) return <React.Fragment key={`${index}-${segment.x}-${segment.y}`}>{renderSnakeHead(segment.x, segment.y)}</React.Fragment>;
-                            const isGabor = index % 2 !== 0;
+                            const isTail = index === snake.length - 1;
+                            
+                            // Check connections
+                            const prev = snake[index - 1]; // Towards Head
+                            const next = snake[index + 1]; // Towards Tail
+
+                            let connectUp = false;
+                            let connectDown = false;
+                            let connectLeft = false;
+                            let connectRight = false;
+
+                            const check = (other: {x: number, y: number}) => {
+                                if (!other) return;
+                                if (other.x === segment.x && other.y === segment.y - 1) connectUp = true;
+                                if (other.x === segment.x && other.y === segment.y + 1) connectDown = true;
+                                if (other.x === segment.x - 1 && other.y === segment.y) connectLeft = true;
+                                if (other.x === segment.x + 1 && other.y === segment.y) connectRight = true;
+                            };
+
+                            check(prev);
+                            check(next);
+
+                            let rTL = '0', rTR = '0', rBR = '0', rBL = '0';
+                            const R = '35%'; 
+
+                            if (isHead || isTail) {
+                                // Cap the ends
+                                if (connectUp) { rBL = R; rBR = R; }
+                                else if (connectDown) { rTL = R; rTR = R; }
+                                else if (connectLeft) { rTR = R; rBR = R; }
+                                else if (connectRight) { rTL = R; rBL = R; }
+                                else { rTL=R; rTR=R; rBL=R; rBR=R; } // Single dot snake
+                            } else {
+                                // Body Turns
+                                // Round the "Outer" corner of the turn to make it smooth.
+                                if (connectUp && connectRight) rBL = R;
+                                else if (connectUp && connectLeft) rBR = R;
+                                else if (connectDown && connectRight) rTL = R;
+                                else if (connectDown && connectLeft) rTR = R;
+                                // Straight segments have 0 radius on connection sides
+                            }
+
+                            // Head Eye Rotation
+                            let headRotation = 0;
+                            if (isHead) {
+                                if (direction === 'RIGHT') headRotation = 90;
+                                else if (direction === 'DOWN') headRotation = 180;
+                                else if (direction === 'LEFT') headRotation = 270;
+                                else if (next) {
+                                    if (next.y > segment.y) headRotation = 0;
+                                    if (next.y < segment.y) headRotation = 180;
+                                    if (next.x > segment.x) headRotation = 270;
+                                    if (next.x < segment.x) headRotation = 90;
+                                }
+                            }
+
+                            // DISABLE TRANSITION to make snake look like "One Piece" without breaking at corners
+                            const transitionStyle = 'none';
+
                             return (
-                                <div key={`${index}-${segment.x}-${segment.y}`} className="absolute transition-all duration-75 rounded-full" style={{ width: `${cellSize * 0.9}px`, height: `${cellSize * 0.9}px`, top: `${segment.y * cellSize + (cellSize * 0.05)}px`, left: `${segment.x * cellSize + (cellSize * 0.05)}px`, backgroundColor: isGabor ? 'transparent' : '#0f172a', ...(isGabor ? gaborStyle : {}), zIndex: 20, boxShadow: '2px 2px 5px rgba(0,0,0,0.3)' }} />
+                                <div 
+                                    key={index} 
+                                    className="absolute" 
+                                    style={{ 
+                                        width: `${cellSize}px`,
+                                        height: `${cellSize}px`,
+                                        top: `${segment.y * cellSize}px`,
+                                        left: `${segment.x * cellSize}px`,
+                                        backgroundColor: bodyBaseColor, 
+                                        backgroundImage: bodyTexture,
+                                        transform: 'scale(1.1)', // Significant overlap to prevent gaps
+                                        borderRadius: `${rTL} ${rTR} ${rBR} ${rBL}`,
+                                        zIndex: isHead ? 30 : 20,
+                                        transition: transitionStyle,
+                                        boxShadow: isHead ? '0 0 15px rgba(96, 165, 250, 0.6)' : 'none'
+                                    }}
+                                >
+                                    {isHead && (
+                                        <div className="w-full h-full relative transition-transform duration-100" style={{ transform: `rotate(${headRotation}deg)` }}>
+                                             {/* Star Eyes */}
+                                            <div className="absolute top-[20%] left-[20%] text-yellow-100 animate-star-pulse text-xl drop-shadow-[0_0_5px_rgba(255,255,255,0.8)]">✦</div>
+                                            <div className="absolute top-[20%] right-[20%] text-yellow-100 animate-star-pulse text-xl drop-shadow-[0_0_5px_rgba(255,255,255,0.8)]">✦</div>
+                                        </div>
+                                    )}
+                                </div>
                             );
                         })}
-                        <div className="absolute flex items-center justify-center transition-all duration-300" style={{ width: `${cellSize}px`, height: `${cellSize}px`, top: `${target.y * cellSize}px`, left: `${target.x * cellSize}px`, zIndex: 10 }}>
-                             <GaborCircle size={cellSize * 0.75} contrast={1} onClick={()=>{}} />
-                        </div>
+
+                        {/* Target (Food) - Scaled to Grid */}
+                        <div 
+                            className="absolute flex items-center justify-center transition-all duration-300 animate-pulse" 
+                            style={{ 
+                                width: `${cellSize}px`, 
+                                height: `${cellSize}px`, 
+                                top: `${target.y * cellSize}px`, 
+                                left: `${target.x * cellSize}px`, 
+                                zIndex: 10,
+                                borderRadius: target.shape === 'circle' ? '50%' : '0%',
+                                ...foodGaborStyle,
+                                boxShadow: '0 0 15px rgba(255,255,255,0.6)'
+                            }} 
+                        />
+                        
+                        {/* Distractor - Scaled to Grid */}
                         {distractors.map(d => (
-                             <div key={d.id} className="absolute flex items-center justify-center transition-opacity duration-300" style={{ width: `${cellSize}px`, height: `${cellSize}px`, top: `${d.y * cellSize}px`, left: `${d.x * cellSize}px`, zIndex: 5 }}>
-                                 <div style={{ width: `${cellSize * d.sizePercent}px`, height: `${cellSize * d.sizePercent}px`, backgroundColor: d.color, borderRadius: '50%', boxShadow: 'inset 2px 2px 5px rgba(255,255,255,0.1)' }} />
-                             </div>
+                             <div 
+                                key={d.id} 
+                                className="absolute flex items-center justify-center transition-opacity duration-300" 
+                                style={{ 
+                                    width: `${cellSize}px`, 
+                                    height: `${cellSize}px`, 
+                                    top: `${d.y * cellSize}px`, 
+                                    left: `${d.x * cellSize}px`, 
+                                    zIndex: 5,
+                                    backgroundColor: '#4b5563', // Solid grey matching contrast
+                                    borderRadius: d.shape === 'circle' ? '50%' : '0%'
+                                }} 
+                             />
                         ))}
                     </div>
                 </div>
                 <div className="absolute bottom-2 left-4 z-20 pointer-events-none">
-                    <div className="bg-white/80 backdrop-blur px-3 py-1 rounded-full shadow-sm border border-slate-200">
-                        <p className="text-xs font-bold text-slate-600">Target: {acuityLabel} (1m)</p>
+                    <div className="bg-slate-800/80 backdrop-blur px-3 py-1 rounded-full shadow-sm border border-slate-700">
+                        <p className="text-xs font-bold text-slate-300">Target: {acuityLabel}</p>
                     </div>
                 </div>
             </main>
@@ -374,10 +579,6 @@ const generateMapPath = (): { nodes: MapNode[], decorations: any[] } => {
     const decorations: any[] = [];
     let currentX = 50;
     
-    // HTML flow is Top(y=0) to Bottom(y=Max).
-    // User starts at Bottom (Level 1) and scrolls Up.
-    // So Level 1 should have the highest Y value.
-    
     for (let i = 100; i >= 1; i--) {
         const y = (100 - i) * LEVEL_ITEM_HEIGHT + 150;
         
@@ -389,13 +590,8 @@ const generateMapPath = (): { nodes: MapNode[], decorations: any[] } => {
         nodes.push({ id: i, x: currentX, y });
     }
 
-    // Generate decorations relative to path
-    // Bottom (Level 1-30): Sky (Clouds) - NO BIRDS, NO SUN (Manual)
-    // Mid (Level 31-70): Upper Atmosphere (Moon, Stars, Dark Clouds)
-    // Top (Level 71-100): Space (Stars only - no planets)
-    
     for (let d = 0; d < DECORATION_COUNT; d++) {
-        const levelIndex = Math.floor(Math.random() * 100) + 1; // 1 to 100
+        const levelIndex = Math.floor(Math.random() * 100) + 1; 
         const node = nodes.find(n => n.id === levelIndex) || nodes[0];
         
         const isLeft = Math.random() > 0.5;
@@ -407,20 +603,16 @@ const generateMapPath = (): { nodes: MapNode[], decorations: any[] } => {
         let scale = 0.5 + Math.random() * 0.8;
 
         if (levelIndex > 70) {
-            // Deep Space - Stars only
             type = 'star';
         } else if (levelIndex > 40) {
-            // Upper Sky / Twilight - Moon/Star/Cloud
             const r = Math.random();
-            if (r > 0.9) type = 'moon'; // Moon is rare
+            if (r > 0.9) type = 'moon'; 
             else if (r > 0.4) type = 'star';
             else type = 'cloud';
         } else {
-            // Lower Sky - Clouds only
             type = 'cloud';
         }
         
-        // Unique adjustments
         if (type === 'moon') { scale = 1.0; }
 
         decorations.push({ id: d, x: decX, y: decY, type, scale });
@@ -443,13 +635,10 @@ const Level6: React.FC<{
 
   const { nodes, decorations } = useMemo(() => generateMapPath(), []);
 
-  // Initial Scroll to Bottom (Level 1)
   useEffect(() => {
     if (view === 'map' && scrollContainerRef.current) {
-        // Set timeout to ensure layout is fully painted
         setTimeout(() => {
             if (scrollContainerRef.current) {
-                // Scroll instantly to the bottom
                 scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
             }
         }, 50);
@@ -479,13 +668,9 @@ const Level6: React.FC<{
   };
 
   const getVisuals = (level: number) => {
-      // Level 1 (Bottom): Big, Clear (6/60)
-      // Level 100 (Top): Small, Faint (6/6)
-      
       const ratio = (level - 1) / 99; 
-      
-      const size = 90 - (ratio * 55); // 90px -> 35px
-      const opacity = 1.0 - (ratio * 0.5); // 1.0 -> 0.5
+      const size = 90 - (ratio * 55);
+      const opacity = 1.0 - (ratio * 0.5);
 
       let label = "6/60";
       if (level > 80) label = "6/6";
@@ -513,7 +698,6 @@ const Level6: React.FC<{
       return (
           <div className="h-screen flex flex-col relative overflow-hidden font-sans bg-black">
               
-              {/* Header */}
               <header className="absolute top-0 w-full p-4 backdrop-blur-md bg-white/10 shadow-lg z-50 border-b border-white/20">
                   <div className="max-w-4xl mx-auto flex justify-between items-center text-white">
                       <h1 className="text-2xl font-bold font-pixel text-shadow-sm">SNAKE SAGA</h1>
@@ -534,12 +718,10 @@ const Level6: React.FC<{
                   >
                       <div className="w-full max-w-2xl mx-auto h-full relative">
                         
-                        {/* Path Line */}
                         <svg className="absolute top-0 left-0 w-full h-full pointer-events-none z-10" style={{ overflow: 'visible' }}>
                             <path d={svgPathData} fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="4" strokeDasharray="12,8" strokeLinecap="round" />
                         </svg>
 
-                        {/* Decorations */}
                         {decorations.map(dec => (
                             <div 
                                 key={`dec-${dec.id}`}
@@ -556,11 +738,9 @@ const Level6: React.FC<{
                                 )}
                                 {dec.type === 'star' && <div className="text-xl text-yellow-100 animate-twinkle" style={{animationDelay: `${dec.id % 3}s`}}>✨</div>}
                                 
-                                {/* Enhanced Moon with Shine */}
                                 {dec.type === 'moon' && (
                                     <div className="relative">
                                         <div className="text-3xl opacity-90 animate-pulse-slow relative z-10 text-slate-200">🌙</div>
-                                        {/* Shining Glow Effect */}
                                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-white blur-xl opacity-40 animate-pulse"></div>
                                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-blue-100 blur-2xl opacity-20"></div>
                                     </div>
@@ -568,7 +748,6 @@ const Level6: React.FC<{
                             </div>
                         ))}
 
-                        {/* Nodes */}
                         {nodes.map((node, index) => {
                             const isUnlocked = node.id <= maxUnlockedLevel;
                             const { size, opacity, label } = getVisuals(node.id);
@@ -578,12 +757,11 @@ const Level6: React.FC<{
                             let borderClass = "border-slate-300";
                             let textClass = "text-slate-700";
 
-                            // Style based on environment
-                            if (node.id > 70) { // Space
+                            if (node.id > 70) { 
                                 bgClass = "bg-indigo-950"; borderClass = "border-indigo-400"; textClass = "text-indigo-100";
-                            } else if (node.id > 30) { // Twilight/Upper Sky
+                            } else if (node.id > 30) { 
                                 bgClass = "bg-indigo-100"; borderClass = "border-indigo-400"; textClass = "text-indigo-900";
-                            } else { // Lower Sky
+                            } else { 
                                 bgClass = "bg-sky-50"; borderClass = "border-sky-400"; textClass = "text-sky-700";
                             }
 
@@ -591,7 +769,6 @@ const Level6: React.FC<{
                                 bgClass = "bg-slate-800"; borderClass = "border-slate-600"; textClass = "text-slate-500";
                             }
 
-                            // Random slight floating delay for natural look
                             const floatDelay = `${(index % 5) * 0.5}s`;
 
                             return (
@@ -620,7 +797,6 @@ const Level6: React.FC<{
                                         {node.id}
                                     </button>
                                     
-                                    {/* Acuity Label - Always show for Boss levels */}
                                     {isBoss && (
                                         <div className="absolute top-full mt-1 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap backdrop-blur-sm border border-white/20 z-30 shadow-md">
                                             {label}
@@ -704,6 +880,14 @@ const Level6: React.FC<{
             }
             .animate-pulse-glow {
                 animation: pulse-glow 5s ease-in-out infinite;
+            }
+            
+            @keyframes star-pulse {
+                0%, 100% { opacity: 1; transform: scale(1.2); filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.8)); }
+                50% { opacity: 0.6; transform: scale(0.9); filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.4)); }
+            }
+            .animate-star-pulse {
+                animation: star-pulse 1s ease-in-out infinite;
             }
         `}</style>
     </>
