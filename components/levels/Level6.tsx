@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Page } from '../../types';
-import { RetryIcon, HomeIcon, NextIcon, StarIcon, PlayIcon } from '../ui/Icons';
+import { RetryIcon, HomeIcon, NextIcon, StarIcon } from '../ui/Icons';
 import ConfirmationModal from '../ConfirmationModal';
 import GaborCircle from '../GaborCircle';
 
@@ -71,6 +71,7 @@ const getCellSizeForLevel = (level: number) => {
 
 const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, onComplete, saveMainProgress }) => {
     const gameContainerRef = useRef<HTMLDivElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
     const [gridCols, setGridCols] = useState(10);
     const [gridRows, setGridRows] = useState(10);
     
@@ -80,12 +81,19 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
     const [gameState, setGameState] = useState<'start' | 'playing' | 'gameOver' | 'levelComplete'>('start');
     const [isExitModalOpen, setIsExitModalOpen] = useState(false);
     
+    // Logic State
     const [snake, setSnake] = useState<{x: number, y: number}[]>([{ x: 5, y: 5 }]);
     const [target, setTarget] = useState<Target>({ x: 2, y: 2, shape: 'circle' });
     const [distractors, setDistractors] = useState<Distractor[]>([]);
     
     const [direction, setDirection] = useState<'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | null>(null);
     const directionRef = useRef<'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | null>(null);
+
+    // Animation Refs
+    const prevSnakeRef = useRef<{x: number, y: number}[]>([{ x: 5, y: 5 }]);
+    const lastMoveTimeRef = useRef<number>(0);
+    const isEatingRef = useRef<boolean>(false);
+    const speedRef = useRef<number>(MIN_SPEED);
 
     const [score, setScore] = useState(0);
     const [highScore, setHighScore] = useState(0);
@@ -104,6 +112,7 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
     }, [subLevel]);
 
     const currentSpeed = Math.max(MIN_SPEED, startSpeed - (score * SPEED_DECREMENT));
+    useEffect(() => { speedRef.current = currentSpeed; }, [currentSpeed]);
     
     const targetScore = getTargetScore(subLevel);
 
@@ -134,7 +143,7 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         // Distractor Logic
         let numDistractors = 0;
         if (subLevel === 1) numDistractors = 1;
-        else if (subLevel === 2) numDistractors = 2;
+        else if (subLevel === 2) numDistractors = 2; // Level 2 gets exactly 2 distractors
         else if (subLevel === 3) numDistractors = 3;
         else numDistractors = 3 + Math.floor((subLevel - 3) / 5);
 
@@ -147,7 +156,7 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                 x: pos.x,
                 y: pos.y,
                 shape: Math.random() > 0.5 ? 'circle' : 'square',
-                color: '#4b5563', // Solid grey
+                color: '#374151', 
                 id: `d-${Date.now()}-${i}`
             });
         }
@@ -180,6 +189,7 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         const items = generateLevelItems(startSnake, cols, rows, 0);
         
         setSnake(startSnake);
+        prevSnakeRef.current = startSnake;
         setTarget(items.target);
         setDistractors(items.distractors);
         
@@ -193,24 +203,90 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         setIsPaused(false);
     }, [generateLevelItems, score, highScore, initGrid]);
 
+    // --- Movement Logic Extracted ---
+    const moveSnake = useCallback(() => {
+        const currentDir = directionRef.current;
+        if (!currentDir) return;
+        
+        setSnake(prevSnake => {
+            // Capture previous state for interpolation
+            prevSnakeRef.current = prevSnake;
+            lastMoveTimeRef.current = Date.now();
+
+            const head = prevSnake[0];
+            const next = { ...head };
+            switch (currentDir) {
+                case 'UP': next.y -= 1; break;
+                case 'DOWN': next.y += 1; break;
+                case 'LEFT': next.x -= 1; break;
+                case 'RIGHT': next.x += 1; break;
+            }
+            
+            // Collision Check
+            if (next.x < 0 || next.x >= gridCols || next.y < 0 || next.y >= gridRows || 
+                prevSnake.some(s => s.x === next.x && s.y === next.y) ||
+                distractors.some(d => d.x === next.x && d.y === next.y)) {
+                setGameState('gameOver');
+                if (score > highScore) setHighScore(score);
+                saveMainProgress(score > 0 ? 1 : 0);
+                return prevSnake;
+            }
+
+            // Eating Check
+            if (next.x === target.x && next.y === target.y) {
+                isEatingRef.current = true;
+                const newScore = score + 1;
+                setScore(newScore);
+                
+                if (newScore >= targetScore) {
+                    setGameState('levelComplete');
+                    saveMainProgress(3); 
+                    return [next, ...prevSnake];
+                }
+
+                const newSnake = [next, ...prevSnake]; 
+                const items = generateLevelItems(newSnake, gridCols, gridRows, newScore);
+                setTarget(items.target);
+                setDistractors(items.distractors);
+                return newSnake;
+            } else {
+                isEatingRef.current = false;
+                return [next, ...prevSnake.slice(0, -1)];
+            }
+        });
+    }, [gridCols, gridRows, target, distractors, score, highScore, saveMainProgress, generateLevelItems, targetScore]);
+
+
+    // Input Handling
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
             
-            // Explicitly ignore arrow keys if game is not playing. 
             if (gameState !== 'playing' || isPaused || isExitModalOpen) return;
             
             const key = e.key;
-            setDirection(prevDirection => {
-                // If waiting for start (null), allow any valid direction
-                switch (key) {
-                case 'ArrowUp': return prevDirection !== 'DOWN' ? 'UP' : prevDirection;
-                case 'ArrowDown': return prevDirection !== 'UP' ? 'DOWN' : prevDirection;
-                case 'ArrowLeft': return prevDirection !== 'RIGHT' ? 'LEFT' : prevDirection;
-                case 'ArrowRight': return prevDirection !== 'LEFT' ? 'RIGHT' : prevDirection;
-                default: return prevDirection;
+            let newDir: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | null = null;
+            
+            switch (key) {
+                case 'ArrowUp': newDir = 'UP'; break;
+                case 'ArrowDown': newDir = 'DOWN'; break;
+                case 'ArrowLeft': newDir = 'LEFT'; break;
+                case 'ArrowRight': newDir = 'RIGHT'; break;
+            }
+
+            if (newDir) {
+                const current = directionRef.current;
+                // Prevent reverse
+                if (current === 'LEFT' && newDir === 'RIGHT') newDir = current;
+                if (current === 'RIGHT' && newDir === 'LEFT') newDir = current;
+                if (current === 'UP' && newDir === 'DOWN') newDir = current;
+                if (current === 'DOWN' && newDir === 'UP') newDir = current;
+
+                if (newDir !== current) {
+                    directionRef.current = newDir;
+                    setDirection(newDir);
                 }
-            });
+            }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
@@ -221,32 +297,35 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
 
         if (gameContainerRef.current) {
             const rect = gameContainerRef.current.getBoundingClientRect();
-            // We use the Head position to determine turn relative to snake, 
-            // but for simplicity in grid tap, we can just use center of screen or center of snake.
-            // Using center of screen is more reliable for "D-Pad" style logic zones.
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
             
             const deltaX = clientX - centerX;
             const deltaY = clientY - centerY;
-            let newDirection = directionRef.current;
+            
+            let newDirection: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | null = null;
             
             if (Math.abs(deltaX) > Math.abs(deltaY)) {
-                if (deltaX > 0) { 
-                    if (directionRef.current !== 'LEFT') newDirection = 'RIGHT'; 
-                } 
-                else { 
-                    if (directionRef.current !== 'RIGHT') newDirection = 'LEFT'; 
-                }
+                if (deltaX > 0) newDirection = 'RIGHT'; 
+                else newDirection = 'LEFT';
             } else {
-                if (deltaY > 0) { 
-                    if (directionRef.current !== 'UP') newDirection = 'DOWN'; 
-                } 
-                else { 
-                    if (directionRef.current !== 'DOWN') newDirection = 'UP'; 
-                }
+                if (deltaY > 0) newDirection = 'DOWN'; 
+                else newDirection = 'UP'; 
             }
-            if (newDirection && newDirection !== directionRef.current) setDirection(newDirection);
+            
+            const current = directionRef.current;
+            // Validate against reverse direction if moving, but ALLOW if current is null (start)
+            if (current) {
+                if (current === 'LEFT' && newDirection === 'RIGHT') newDirection = current;
+                if (current === 'RIGHT' && newDirection === 'LEFT') newDirection = current;
+                if (current === 'UP' && newDirection === 'DOWN') newDirection = current;
+                if (current === 'DOWN' && newDirection === 'UP') newDirection = current;
+            }
+
+            if (newDirection && newDirection !== current) {
+                directionRef.current = newDirection;
+                setDirection(newDirection);
+            }
         }
     }, [gameState, isPaused, isExitModalOpen]);
 
@@ -257,50 +336,217 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         handleInput(e.clientX, e.clientY);
     };
 
+    // IMMEDIATE START EFFECT
+    // If direction changes from null to something, trigger move immediately to avoid delay
+    const hasStartedRef = useRef(false);
+    useEffect(() => {
+        if (gameState === 'playing' && direction !== null && !hasStartedRef.current) {
+            hasStartedRef.current = true;
+            moveSnake(); // Immediate first move
+        }
+        if (direction === null) hasStartedRef.current = false;
+    }, [direction, gameState, moveSnake]);
+
+    // Game Loop (Interval)
     useEffect(() => {
         if (gameState !== 'playing' || isPaused || isExitModalOpen) return;
+        
         const gameInterval = setInterval(() => {
-            const currentDir = directionRef.current;
-            if (!currentDir) return; // Wait for first input
-            
-            setSnake(prevSnake => {
-                const head = prevSnake[0];
-                const next = { ...head };
-                switch (currentDir) {
-                    case 'UP': next.y -= 1; break;
-                    case 'DOWN': next.y += 1; break;
-                    case 'LEFT': next.x -= 1; break;
-                    case 'RIGHT': next.x += 1; break;
-                }
-                if (next.x < 0 || next.x >= gridCols || next.y < 0 || next.y >= gridRows || 
-                    prevSnake.some(s => s.x === next.x && s.y === next.y) ||
-                    distractors.some(d => d.x === next.x && d.y === next.y)) {
-                    setGameState('gameOver');
-                    if (score > highScore) setHighScore(score);
-                    saveMainProgress(score > 0 ? 1 : 0);
-                    return prevSnake;
-                }
-                if (next.x === target.x && next.y === target.y) {
-                    const newScore = score + 1; // 1 Mark per food
-                    setScore(newScore);
-                    
-                    if (newScore >= targetScore) {
-                        setGameState('levelComplete');
-                        saveMainProgress(3); 
-                        return [next, ...prevSnake];
-                    }
-
-                    const newSnake = [next, ...prevSnake]; 
-                    const items = generateLevelItems(newSnake, gridCols, gridRows, newScore);
-                    setTarget(items.target);
-                    setDistractors(items.distractors);
-                    return newSnake;
-                }
-                return [next, ...prevSnake.slice(0, -1)];
-            });
+            if (directionRef.current) {
+                moveSnake();
+            } else {
+                lastMoveTimeRef.current = Date.now();
+            }
         }, currentSpeed);
+
         return () => clearInterval(gameInterval);
-    }, [gameState, currentSpeed, target, distractors, score, highScore, saveMainProgress, isPaused, isExitModalOpen, gridCols, gridRows, generateLevelItems, targetScore]);
+    }, [gameState, currentSpeed, isPaused, isExitModalOpen, moveSnake]);
+
+    // Animation Loop (Rendering)
+    useEffect(() => {
+        let animationFrameId: number;
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        
+        // Resize Canvas to match grid container
+        canvas.width = gridCols * cellSize;
+        canvas.height = gridRows * cellSize;
+
+        const draw = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Calculate interpolation factor (t)
+            const now = Date.now();
+            const elapsed = now - lastMoveTimeRef.current;
+            const duration = speedRef.current;
+            const t = Math.min(1, Math.max(0, elapsed / duration));
+            
+            const currentSnake = snake;
+            const prevSnake = prevSnakeRef.current;
+            
+            if (currentSnake.length === 0) return;
+
+            // --- Construct Visual Path Points ---
+            let visualPoints: {x: number, y: number}[] = [];
+
+            // 1. Interpolated Head
+            if (prevSnake.length > 0 && currentSnake.length > 0) {
+                const pHead = prevSnake[0];
+                const cHead = currentSnake[0];
+                
+                const vHeadX = pHead.x + (cHead.x - pHead.x) * t;
+                const vHeadY = pHead.y + (cHead.y - pHead.y) * t;
+                
+                visualPoints.push({ x: vHeadX, y: vHeadY });
+            } else {
+                 visualPoints.push(currentSnake[0]);
+            }
+
+            // 2. Static Body
+            for (let i = 1; i < currentSnake.length; i++) {
+                visualPoints.push(currentSnake[i]);
+            }
+
+            // 3. Interpolated Tail
+            if (!isEatingRef.current && prevSnake.length > 0 && currentSnake.length > 0) {
+                 const pTail = prevSnake[prevSnake.length - 1]; 
+                 const cTail = currentSnake[currentSnake.length - 1]; 
+                 
+                 const vTailX = pTail.x + (cTail.x - pTail.x) * t;
+                 const vTailY = pTail.y + (cTail.y - pTail.y) * t;
+                 
+                 visualPoints.push({ x: vTailX, y: vTailY });
+            } else if (currentSnake.length > 0) {
+                 // If eating, tail is stationary at the end
+                 visualPoints.push(currentSnake[currentSnake.length-1]);
+            }
+            
+            if (visualPoints.length < 2 && currentSnake.length > 0) {
+                 visualPoints = [visualPoints[0], visualPoints[0]]; 
+            }
+
+            // --- Render Snake using Dense Circles (Particle System) ---
+            const snakeWidth = cellSize * 0.85; 
+            const stepSize = 1; 
+            
+            let currentDistanceTraveled = 0;
+            
+            let totalLen = 0;
+            for (let i = 0; i < visualPoints.length - 1; i++) {
+                const dx = visualPoints[i+1].x - visualPoints[i].x;
+                const dy = visualPoints[i+1].y - visualPoints[i].y;
+                totalLen += Math.sqrt(dx*dx + dy*dy);
+            }
+            if (totalLen === 0) totalLen = 1;
+
+            for (let i = 0; i < visualPoints.length - 1; i++) {
+                const p1 = visualPoints[i];
+                const p2 = visualPoints[i+1];
+                
+                const dx = p2.x - p1.x;
+                const dy = p2.y - p1.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                // Convert to pixels
+                const pixelDist = dist * cellSize;
+                const steps = Math.ceil(pixelDist / stepSize);
+                
+                if (pixelDist <= 0) continue;
+
+                for (let j = 0; j <= steps; j++) {
+                    const ratio = j / steps;
+                    const x = p1.x + dx * ratio;
+                    const y = p1.y + dy * ratio;
+                    
+                    // Calculate distance from head for texture
+                    const totalDist = currentDistanceTraveled + (pixelDist * ratio);
+                    const normalizedPos = (currentDistanceTraveled + pixelDist * ratio) / (totalLen * cellSize);
+
+                    // --- Gabor Texture Logic ---
+                    const stripeFrequency = 0.2; 
+                    const gratingValue = Math.sin(totalDist * stripeFrequency);
+                    
+                    // --- Variable Contrast Sensitivity Envelope ---
+                    // Varies contrast along the body length
+                    const contrastFrequency = 0.02;
+                    const rawEnvelope = (Math.sin(totalDist * contrastFrequency) + 1) / 2;
+                    const contrast = 0.1 + 0.9 * rawEnvelope;
+                    const effectiveContrast = totalDist < cellSize * 2 ? 1.0 : contrast;
+
+                    // --- Final Color Calculation ---
+                    // Base lightness gradient: Head (White) -> Tail (Dark Grey)
+                    // Modulate with Gabor stripes based on effective contrast
+                    const baseLightness = Math.max(20, 98 - (normalizedPos * 78));
+                    const gaborMod = gratingValue * 25 * effectiveContrast;
+                    
+                    ctx.beginPath();
+                    ctx.arc(x * cellSize + cellSize/2, y * cellSize + cellSize/2, snakeWidth/2, 0, Math.PI * 2);
+                    ctx.fillStyle = `hsl(0, 0%, ${baseLightness + gaborMod}%)`;
+                    ctx.fill();
+                }
+                currentDistanceTraveled += pixelDist;
+            }
+            
+            // Draw Head (Topmost)
+            if(visualPoints.length > 0) {
+                 const pHead = visualPoints[0];
+                 
+                 let angle = 0;
+                 if (visualPoints.length > 1) {
+                     const pNext = visualPoints[1];
+                     angle = Math.atan2(pHead.y - pNext.y, pHead.x - pNext.x) + Math.PI/2; 
+                 }
+
+                 // Draw Head Glow
+                 ctx.beginPath();
+                 ctx.arc(pHead.x * cellSize + cellSize/2, pHead.y * cellSize + cellSize/2, snakeWidth/2, 0, Math.PI * 2);
+                 ctx.fillStyle = `hsl(0, 0%, 95%)`;
+                 ctx.shadowColor = "rgba(255, 255, 255, 0.6)";
+                 ctx.shadowBlur = 12;
+                 ctx.fill();
+                 ctx.shadowBlur = 0;
+
+                 ctx.save();
+                 ctx.translate(pHead.x * cellSize + cellSize/2, pHead.y * cellSize + cellSize/2);
+                 ctx.rotate(angle);
+                 
+                 // Draw Stars (Yellow Eyes)
+                 ctx.fillStyle = "#fef08a"; 
+                 const eyeOffsetX = snakeWidth * 0.25;
+                 const eyeOffsetY = -snakeWidth * 0.1;
+                 const starSize = snakeWidth * 0.15;
+                 
+                 const pulse = 1 + Math.sin(now / 100) * 0.2;
+
+                 const drawStar = (cx: number, cy: number) => {
+                     ctx.beginPath();
+                     for(let k=0; k<4; k++) {
+                         ctx.lineTo(cx + Math.cos((k*90)*Math.PI/180)*starSize*pulse, cy + Math.sin((k*90)*Math.PI/180)*starSize*pulse);
+                         ctx.lineTo(cx + Math.cos((k*90+45)*Math.PI/180)*starSize*0.4*pulse, cy + Math.sin((k*90+45)*Math.PI/180)*starSize*0.4*pulse);
+                     }
+                     ctx.closePath();
+                     ctx.fill();
+                     ctx.shadowColor = "white";
+                     ctx.shadowBlur = 5;
+                     ctx.stroke();
+                     ctx.shadowBlur = 0;
+                 };
+                 
+                 drawStar(-eyeOffsetX, eyeOffsetY);
+                 drawStar(eyeOffsetX, eyeOffsetY);
+                 
+                 ctx.restore();
+            }
+
+            animationFrameId = requestAnimationFrame(draw);
+        };
+        draw();
+        return () => cancelAnimationFrame(animationFrameId);
+
+    }, [snake, gridCols, gridRows, cellSize]); 
 
     useEffect(() => {
         const handleResize = () => initGrid();
@@ -308,6 +554,14 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         handleResize();
         return () => window.removeEventListener('resize', handleResize);
     }, [initGrid]);
+
+    // Distractor Gabor pattern (Fake/Low contrast/Different orientation) - Darker Grey
+    const distractorGaborStyle = {
+        backgroundImage: `repeating-linear-gradient(135deg, #374151, #374151 2px, #111827 2px, #111827 4px)`, 
+        backgroundColor: '#374151',
+        backgroundSize: '100% 100%',
+        boxShadow: '0 0 8px rgba(0, 0, 0, 0.5)'
+    };
 
     const renderOverlay = () => {
         const commonClasses = "absolute inset-0 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center text-center z-40 p-6 font-sans rounded-md border border-slate-800";
@@ -327,7 +581,14 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                             </div>
                             <div className="h-8 w-px bg-slate-600"></div>
                             <div className="flex flex-col items-center gap-2">
-                                <div style={{width: '40px', height: '40px', backgroundColor: '#4b5563', borderRadius: '50%'}}></div>
+                                <div 
+                                    style={{
+                                        width: '40px', 
+                                        height: '40px', 
+                                        borderRadius: '50%',
+                                        ...distractorGaborStyle
+                                    }}
+                                ></div>
                                 <span className="text-xs font-medium text-rose-400">AVOID</span>
                             </div>
                         </div>
@@ -388,10 +649,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         return null;
     };
 
-    // Snake body Gabor pattern
-    const bodyBaseColor = '#60a5fa'; // Blue-400 like color
-    const bodyTexture = `repeating-linear-gradient(45deg, rgba(255,255,255,0.1), rgba(255,255,255,0.1) 2px, transparent 2px, transparent 4px)`;
-    
     // Food Gabor pattern (High contrast)
     const foodGaborStyle = {
         backgroundImage: `repeating-linear-gradient(45deg, #ffffff, #ffffff 2px, #000000 2px, #000000 4px)`,
@@ -417,10 +674,8 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                 <div ref={gameContainerRef} className="w-full h-full flex items-center justify-center relative bg-black">
                     <div className="relative overflow-hidden pointer-events-auto bg-black" style={{ width: `${gridCols * cellSize}px`, height: `${gridRows * cellSize}px`, border: `${BORDER_THICKNESS}px solid #475569`, boxShadow: '0 0 30px rgba(6,182,212,0.1)' }}>
                         {renderOverlay()}
-                        {/* Faint Grid */}
                         <div className="absolute inset-0 opacity-20" style={{ backgroundImage: `linear-gradient(#334155 1px, transparent 1px), linear-gradient(90deg, #334155 1px, transparent 1px)`, backgroundSize: `${cellSize}px ${cellSize}px` }}></div>
 
-                        {/* Hint Text when Waiting for Start */}
                         {gameState === 'playing' && direction === null && (
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
                                 <div className="bg-black/50 text-cyan-400 px-6 py-3 rounded-full animate-pulse backdrop-blur-sm border border-cyan-500/30 text-lg font-bold shadow-[0_0_20px_rgba(34,211,238,0.3)]">
@@ -429,97 +684,8 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                             </div>
                         )}
 
-                        {snake.map((segment, index) => {
-                            const isHead = index === 0;
-                            const isTail = index === snake.length - 1;
-                            
-                            // Check connections
-                            const prev = snake[index - 1]; // Towards Head
-                            const next = snake[index + 1]; // Towards Tail
+                        <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none z-20" />
 
-                            let connectUp = false;
-                            let connectDown = false;
-                            let connectLeft = false;
-                            let connectRight = false;
-
-                            const check = (other: {x: number, y: number}) => {
-                                if (!other) return;
-                                if (other.x === segment.x && other.y === segment.y - 1) connectUp = true;
-                                if (other.x === segment.x && other.y === segment.y + 1) connectDown = true;
-                                if (other.x === segment.x - 1 && other.y === segment.y) connectLeft = true;
-                                if (other.x === segment.x + 1 && other.y === segment.y) connectRight = true;
-                            };
-
-                            check(prev);
-                            check(next);
-
-                            let rTL = '0', rTR = '0', rBR = '0', rBL = '0';
-                            const R = '35%'; 
-
-                            if (isHead || isTail) {
-                                // Cap the ends
-                                if (connectUp) { rBL = R; rBR = R; }
-                                else if (connectDown) { rTL = R; rTR = R; }
-                                else if (connectLeft) { rTR = R; rBR = R; }
-                                else if (connectRight) { rTL = R; rBL = R; }
-                                else { rTL=R; rTR=R; rBL=R; rBR=R; } // Single dot snake
-                            } else {
-                                // Body Turns
-                                // Round the "Outer" corner of the turn to make it smooth.
-                                if (connectUp && connectRight) rBL = R;
-                                else if (connectUp && connectLeft) rBR = R;
-                                else if (connectDown && connectRight) rTL = R;
-                                else if (connectDown && connectLeft) rTR = R;
-                                // Straight segments have 0 radius on connection sides
-                            }
-
-                            // Head Eye Rotation
-                            let headRotation = 0;
-                            if (isHead) {
-                                if (direction === 'RIGHT') headRotation = 90;
-                                else if (direction === 'DOWN') headRotation = 180;
-                                else if (direction === 'LEFT') headRotation = 270;
-                                else if (next) {
-                                    if (next.y > segment.y) headRotation = 0;
-                                    if (next.y < segment.y) headRotation = 180;
-                                    if (next.x > segment.x) headRotation = 270;
-                                    if (next.x < segment.x) headRotation = 90;
-                                }
-                            }
-
-                            // DISABLE TRANSITION to make snake look like "One Piece" without breaking at corners
-                            const transitionStyle = 'none';
-
-                            return (
-                                <div 
-                                    key={index} 
-                                    className="absolute" 
-                                    style={{ 
-                                        width: `${cellSize}px`,
-                                        height: `${cellSize}px`,
-                                        top: `${segment.y * cellSize}px`,
-                                        left: `${segment.x * cellSize}px`,
-                                        backgroundColor: bodyBaseColor, 
-                                        backgroundImage: bodyTexture,
-                                        transform: 'scale(1.1)', // Significant overlap to prevent gaps
-                                        borderRadius: `${rTL} ${rTR} ${rBR} ${rBL}`,
-                                        zIndex: isHead ? 30 : 20,
-                                        transition: transitionStyle,
-                                        boxShadow: isHead ? '0 0 15px rgba(96, 165, 250, 0.6)' : 'none'
-                                    }}
-                                >
-                                    {isHead && (
-                                        <div className="w-full h-full relative transition-transform duration-100" style={{ transform: `rotate(${headRotation}deg)` }}>
-                                             {/* Star Eyes */}
-                                            <div className="absolute top-[20%] left-[20%] text-yellow-100 animate-star-pulse text-xl drop-shadow-[0_0_5px_rgba(255,255,255,0.8)]">✦</div>
-                                            <div className="absolute top-[20%] right-[20%] text-yellow-100 animate-star-pulse text-xl drop-shadow-[0_0_5px_rgba(255,255,255,0.8)]">✦</div>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-
-                        {/* Target (Food) - Scaled to Grid */}
                         <div 
                             className="absolute flex items-center justify-center transition-all duration-300 animate-pulse" 
                             style={{ 
@@ -527,14 +693,13 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                                 height: `${cellSize}px`, 
                                 top: `${target.y * cellSize}px`, 
                                 left: `${target.x * cellSize}px`, 
-                                zIndex: 10,
+                                zIndex: 100, 
                                 borderRadius: target.shape === 'circle' ? '50%' : '0%',
                                 ...foodGaborStyle,
                                 boxShadow: '0 0 15px rgba(255,255,255,0.6)'
                             }} 
                         />
                         
-                        {/* Distractor - Scaled to Grid */}
                         {distractors.map(d => (
                              <div 
                                 key={d.id} 
@@ -545,8 +710,8 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                                     top: `${d.y * cellSize}px`, 
                                     left: `${d.x * cellSize}px`, 
                                     zIndex: 5,
-                                    backgroundColor: '#4b5563', // Solid grey matching contrast
-                                    borderRadius: d.shape === 'circle' ? '50%' : '0%'
+                                    borderRadius: d.shape === 'circle' ? '50%' : '0%',
+                                    ...distractorGaborStyle
                                 }} 
                              />
                         ))}
@@ -563,335 +728,42 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
     );
 };
 
-// --- Map Generation Logic ---
-
-const LEVEL_ITEM_HEIGHT = 100; // Height per level
-const DECORATION_COUNT = 80;
-
-interface MapNode {
-  id: number;
-  x: number;
-  y: number;
-}
-
-const generateMapPath = (): { nodes: MapNode[], decorations: any[] } => {
-    const nodes: MapNode[] = [];
-    const decorations: any[] = [];
-    let currentX = 50;
-    
-    for (let i = 100; i >= 1; i--) {
-        const y = (100 - i) * LEVEL_ITEM_HEIGHT + 150;
-        
-        if (i % 20 < 5) currentX = 50 + Math.sin(i) * 30;
-        else if (i % 20 < 12) currentX = 50 + Math.cos(i * 0.2) * 35;
-        else currentX = 50 + Math.sin(i * 0.4) * 20;
-        
-        currentX = Math.max(15, Math.min(85, currentX));
-        nodes.push({ id: i, x: currentX, y });
-    }
-
-    for (let d = 0; d < DECORATION_COUNT; d++) {
-        const levelIndex = Math.floor(Math.random() * 100) + 1; 
-        const node = nodes.find(n => n.id === levelIndex) || nodes[0];
-        
-        const isLeft = Math.random() > 0.5;
-        const dist = 15 + Math.random() * 25; 
-        const decX = isLeft ? Math.max(5, node.x - dist) : Math.min(95, node.x + dist);
-        const decY = node.y + (Math.random() * 80 - 40);
-        
-        let type = 'cloud';
-        let scale = 0.5 + Math.random() * 0.8;
-
-        if (levelIndex > 70) {
-            type = 'star';
-        } else if (levelIndex > 40) {
-            const r = Math.random();
-            if (r > 0.9) type = 'moon'; 
-            else if (r > 0.4) type = 'star';
-            else type = 'cloud';
-        } else {
-            type = 'cloud';
-        }
-        
-        if (type === 'moon') { scale = 1.0; }
-
-        decorations.push({ id: d, x: decX, y: decY, type, scale });
-    }
-
-    return { nodes, decorations };
-};
-
-// --- Main Map Component ---
-
-const Level6: React.FC<{
+interface Level6Props {
   setCurrentPage: (page: Page) => void;
   saveLevelCompletion: (levelId: string, stars: number) => void;
-}> = ({ setCurrentPage, saveLevelCompletion }) => {
-  const [view, setView] = useState<'map' | 'game'>('map');
-  const [activeSubLevel, setActiveSubLevel] = useState(1);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  
-  const [maxUnlockedLevel, setMaxUnlockedLevel] = useState(TOTAL_SUB_LEVELS);
+}
 
-  const { nodes, decorations } = useMemo(() => generateMapPath(), []);
+const Level6: React.FC<Level6Props> = ({ setCurrentPage, saveLevelCompletion }) => {
+    const [currentSubLevel, setCurrentSubLevel] = useState(1);
+    
+    const handleLevelComplete = (score: number) => {
+        if(currentSubLevel >= TOTAL_SUB_LEVELS) {
+            saveLevelCompletion('level6', 3);
+            setCurrentPage('home'); 
+        } else {
+             setCurrentSubLevel(prev => prev + 1);
+        }
+    };
+    
+    const handleExit = () => {
+        setCurrentPage('home');
+    };
 
-  useEffect(() => {
-    if (view === 'map' && scrollContainerRef.current) {
-        setTimeout(() => {
-            if (scrollContainerRef.current) {
-                scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-            }
-        }, 50);
-    }
-  }, [view]);
+    const saveProgress = (stars: number) => {
+         saveLevelCompletion('level6', stars);
+    };
 
-  const handleSubLevelClick = (level: number) => {
-      if (level <= maxUnlockedLevel) {
-          setActiveSubLevel(level);
-          setView('game');
-      }
-  };
+    const acuity = `20/${Math.round(200 - (currentSubLevel * 1.8))}`; 
 
-  const handleGameComplete = (score: number) => {
-      if (activeSubLevel === maxUnlockedLevel && activeSubLevel < TOTAL_SUB_LEVELS) {
-          setMaxUnlockedLevel(prev => Math.max(prev, activeSubLevel + 1));
-      }
-      setView('map');
-  };
-
-  const handleGameExit = () => {
-      setView('map');
-  };
-
-  const handleMapExitRequest = () => {
-      setCurrentPage('home');
-  };
-
-  const getVisuals = (level: number) => {
-      const ratio = (level - 1) / 99; 
-      const size = 90 - (ratio * 55);
-      const opacity = 1.0 - (ratio * 0.5);
-
-      let label = "6/60";
-      if (level > 80) label = "6/6";
-      else if (level > 60) label = "6/12";
-      else if (level > 40) label = "6/24";
-      else if (level > 20) label = "6/36";
-
-      return { size, opacity, label };
-  };
-
-  const svgPathData = useMemo(() => {
-      if (nodes.length < 2) return "";
-      let d = `M ${nodes[0].x}% ${nodes[0].y}`;
-      for (let i = 1; i < nodes.length; i++) {
-          const curr = nodes[i];
-          const prev = nodes[i-1];
-          d += ` C ${prev.x}% ${prev.y + 50}, ${curr.x}% ${curr.y - 50}, ${curr.x}% ${curr.y}`;
-      }
-      return d;
-  }, [nodes]);
-
-  const renderMap = () => {
-      const totalHeight = (TOTAL_SUB_LEVELS * LEVEL_ITEM_HEIGHT) + 300;
-
-      return (
-          <div className="h-screen flex flex-col relative overflow-hidden font-sans bg-black">
-              
-              <header className="absolute top-0 w-full p-4 backdrop-blur-md bg-white/10 shadow-lg z-50 border-b border-white/20">
-                  <div className="max-w-4xl mx-auto flex justify-between items-center text-white">
-                      <h1 className="text-2xl font-bold font-pixel text-shadow-sm">SNAKE SAGA</h1>
-                      <div className="bg-white/20 px-3 py-1 rounded-full font-bold text-sm border border-white/30">
-                          Level {activeSubLevel} / {TOTAL_SUB_LEVELS}
-                      </div>
-                  </div>
-              </header>
-
-              <div ref={scrollContainerRef} className="flex-grow overflow-y-auto relative z-10 custom-scrollbar">
-                  <div 
-                    style={{ 
-                        height: `${totalHeight}px`, 
-                        position: 'relative',
-                        backgroundColor: '#000000',
-                    }} 
-                    className="w-full"
-                  >
-                      <div className="w-full max-w-2xl mx-auto h-full relative">
-                        
-                        <svg className="absolute top-0 left-0 w-full h-full pointer-events-none z-10" style={{ overflow: 'visible' }}>
-                            <path d={svgPathData} fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="4" strokeDasharray="12,8" strokeLinecap="round" />
-                        </svg>
-
-                        {decorations.map(dec => (
-                            <div 
-                                key={`dec-${dec.id}`}
-                                className="absolute"
-                                style={{ 
-                                    left: `${dec.x}%`, 
-                                    top: `${dec.y}px`, 
-                                    transform: `translate(-50%, -50%) scale(${dec.scale})`,
-                                    zIndex: 5
-                                }}
-                            >
-                                {dec.type === 'cloud' && (
-                                    <div className="text-6xl opacity-60 drop-shadow-lg text-slate-400 animate-float" style={{animationDelay: `${dec.id % 5}s`}}>☁️</div>
-                                )}
-                                {dec.type === 'star' && <div className="text-xl text-yellow-100 animate-twinkle" style={{animationDelay: `${dec.id % 3}s`}}>✨</div>}
-                                
-                                {dec.type === 'moon' && (
-                                    <div className="relative">
-                                        <div className="text-3xl opacity-90 animate-pulse-slow relative z-10 text-slate-200">🌙</div>
-                                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-white blur-xl opacity-40 animate-pulse"></div>
-                                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-blue-100 blur-2xl opacity-20"></div>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-
-                        {nodes.map((node, index) => {
-                            const isUnlocked = node.id <= maxUnlockedLevel;
-                            const { size, opacity, label } = getVisuals(node.id);
-                            const isBoss = node.id % 10 === 0 || node.id === 1;
-                            
-                            let bgClass = "bg-white";
-                            let borderClass = "border-slate-300";
-                            let textClass = "text-slate-700";
-
-                            if (node.id > 70) { 
-                                bgClass = "bg-indigo-950"; borderClass = "border-indigo-400"; textClass = "text-indigo-100";
-                            } else if (node.id > 30) { 
-                                bgClass = "bg-indigo-100"; borderClass = "border-indigo-400"; textClass = "text-indigo-900";
-                            } else { 
-                                bgClass = "bg-sky-50"; borderClass = "border-sky-400"; textClass = "text-sky-700";
-                            }
-
-                            if (!isUnlocked) {
-                                bgClass = "bg-slate-800"; borderClass = "border-slate-600"; textClass = "text-slate-500";
-                            }
-
-                            const floatDelay = `${(index % 5) * 0.5}s`;
-
-                            return (
-                                <div 
-                                    key={node.id}
-                                    className="absolute flex flex-col items-center justify-center z-20 animate-float-slow"
-                                    style={{
-                                        left: `${node.x}%`,
-                                        top: `${node.y}px`,
-                                        transform: 'translate(-50%, -50%)',
-                                        width: `${size}px`,
-                                        height: `${size}px`,
-                                        animationDelay: floatDelay
-                                    }}
-                                >
-                                    <button
-                                        onClick={() => handleSubLevelClick(node.id)}
-                                        disabled={!isUnlocked}
-                                        style={{ opacity: isUnlocked ? opacity : 0.4 }}
-                                        className={`
-                                            w-full h-full rounded-full flex items-center justify-center font-bold border-4 shadow-lg transition-transform hover:scale-110
-                                            ${bgClass} ${borderClass} ${textClass}
-                                            ${isBoss ? 'ring-4 ring-yellow-400/50' : ''}
-                                        `}
-                                    >
-                                        {node.id}
-                                    </button>
-                                    
-                                    {isBoss && (
-                                        <div className="absolute top-full mt-1 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap backdrop-blur-sm border border-white/20 z-30 shadow-md">
-                                            {label}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                      </div>
-                  </div>
-              </div>
-
-              <div className="fixed bottom-6 right-6 z-30">
-                <RingHomeButton onClick={handleMapExitRequest} />
-              </div>
-          </div>
-      );
-  };
-
-  const currentAcuityLabel = getVisuals(activeSubLevel).label;
-
-  return (
-    <>
-        {view === 'map' ? renderMap() : (
-            <SnakeGame 
-                subLevel={activeSubLevel} 
-                acuityLabel={currentAcuityLabel}
-                onExit={handleGameExit} 
-                onComplete={handleGameComplete}
-                saveMainProgress={(stars) => saveLevelCompletion('level6', stars)}
-            />
-        )}
-        <style>{`
-            .custom-scrollbar::-webkit-scrollbar { display: none; }
-            .custom-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-            .text-shadow-sm { text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
-            
-            @keyframes float {
-                0%, 100% { transform: translateY(0px) translateX(0px); }
-                50% { transform: translateY(-10px) translateX(5px); }
-            }
-            .animate-float {
-                animation: float 6s ease-in-out infinite;
-            }
-            
-            @keyframes float-slow {
-                0%, 100% { transform: translate(-50%, -50%) translateY(0px); }
-                50% { transform: translate(-50%, -50%) translateY(-8px); }
-            }
-            .animate-float-slow {
-                animation: float-slow 5s ease-in-out infinite;
-            }
-
-            @keyframes twinkle {
-                0%, 100% { opacity: 1; transform: scale(1); }
-                50% { opacity: 0.5; transform: scale(0.8); }
-            }
-            .animate-twinkle {
-                animation: twinkle 3s ease-in-out infinite;
-            }
-
-            @keyframes spin-slow {
-                from { transform: rotate(0deg); }
-                to { transform: rotate(360deg); }
-            }
-            .animate-spin-slow {
-                animation: spin-slow 20s linear infinite;
-            }
-
-            @keyframes pulse-slow {
-                0%, 100% { transform: scale(1); opacity: 0.9; }
-                50% { transform: scale(1.05); opacity: 1; }
-            }
-            .animate-pulse-slow {
-                animation: pulse-slow 4s ease-in-out infinite;
-            }
-
-             @keyframes pulse-glow {
-                0%, 100% { box-shadow: 0 0 40px rgba(253, 224, 71, 0.2); transform: scale(1); }
-                50% { box-shadow: 0 0 80px rgba(253, 224, 71, 0.5); transform: scale(1.05); }
-            }
-            .animate-pulse-glow {
-                animation: pulse-glow 5s ease-in-out infinite;
-            }
-            
-            @keyframes star-pulse {
-                0%, 100% { opacity: 1; transform: scale(1.2); filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.8)); }
-                50% { opacity: 0.6; transform: scale(0.9); filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.4)); }
-            }
-            .animate-star-pulse {
-                animation: star-pulse 1s ease-in-out infinite;
-            }
-        `}</style>
-    </>
-  );
+    return (
+        <SnakeGame 
+            subLevel={currentSubLevel} 
+            acuityLabel={acuity}
+            onExit={handleExit} 
+            onComplete={handleLevelComplete}
+            saveMainProgress={saveProgress}
+        />
+    );
 };
 
 export default Level6;

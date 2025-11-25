@@ -2,44 +2,181 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Page } from '../../types';
 import GaborCircle from '../GaborCircle';
-import { HomeIcon, HeartIcon, HeartOutlineIcon, XCircleIcon, PauseIcon, PlayIcon } from '../ui/Icons';
+import { HomeIcon, HeartIcon, HeartOutlineIcon, XCircleIcon } from '../ui/Icons';
 import { RetryIcon } from '../ui/Icons';
 import ConfirmationModal from '../ConfirmationModal';
 
+// --- Helper Functions ---
+
+const getEcgPattern = (midY: number, baseAmplitude: number) => {
+  const p: number[] = [];
+  const addSegment = (length: number, yFunc: (i: number) => number) => {
+    for (let i = 0; i < length; i++) p.push(yFunc(i));
+  };
+  
+  const oneBeat = (amplitude: number) => {
+    // P wave (up)
+    addSegment(10, i => midY - (Math.sin(i / 10 * Math.PI) * 10 * amplitude));
+    addSegment(5, () => midY);
+    // Q wave (down)
+    addSegment(5, i => midY + (i * 2.5 * amplitude));
+    // R wave (up)
+    addSegment(10, i => midY + (12.5 * amplitude) - (i * 7.5 * amplitude));
+    // S wave (down)
+    addSegment(10, i => (midY - 55 * amplitude) + (i * 9 * amplitude));
+    addSegment(5, i => (midY + 26 * amplitude) - (i * 6.5 * amplitude));
+    // T wave (up)
+    addSegment(20, i => midY - (Math.sin(i / 20 * Math.PI) * 35 * amplitude));
+    addSegment(5, () => midY);
+  };
+
+  for(let i = 0; i < 20; i++) {
+    const randomAmplitude = baseAmplitude * (0.8 + Math.random() * 0.4);
+    const baselineLength = Math.floor(40 + Math.random() * 60);
+    addSegment(baselineLength, () => midY);
+    oneBeat(randomAmplitude);
+  }
+  return p;
+};
+
 // --- Helper Components ---
 
-const Fireworks: React.FC<{ x: number; y: number }> = ({ x, y }) => {
-  const particles = Array.from({ length: 20 });
-  return (
-    <div className="absolute inset-0 pointer-events-none z-50">
-      {particles.map((_, i) => (
-        <div
-          key={i}
-          className="absolute rounded-full bg-yellow-400 animate-firework"
-          style={{
-            left: x,
-            top: y,
-            '--i': i,
-            width: `${Math.random() * 4 + 2}px`,
-            height: `${Math.random() * 4 + 2}px`,
-          }}
-        />
-      ))}
-      <style>{`
-        @keyframes firework {
-          0% { transform: translate(0, 0) scale(1); opacity: 1; }
-          100% { 
-            transform: translate(calc(cos(var(--i) * 18deg) * 60px), calc(sin(var(--i) * 18deg) * 60px)) scale(0); 
-            opacity: 0; 
-          }
+const SimpleECGCanvas: React.FC = () => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        let animationFrameId: number;
+        let currentX = 0;
+        let patternStep = 0;
+        let pattern: number[] = [];
+
+        const setup = () => {
+             const parent = canvas.parentElement;
+             if (!parent) return;
+             canvas.width = parent.offsetWidth;
+             canvas.height = parent.offsetHeight;
+             const baseAmplitude = Math.min(canvas.height / 180, 2.5);
+             pattern = getEcgPattern(canvas.height / 2, baseAmplitude);
+             currentX = 0;
+             patternStep = 0;
+        };
+
+        const draw = () => {
+             const speed = 3;
+             const clearX = (currentX + speed + 8) % canvas.width;
+             ctx.clearRect(clearX, 0, 20, canvas.height);
+             
+             ctx.beginPath();
+             ctx.strokeStyle = '#ef4444'; // Red-500
+             ctx.lineWidth = 5; // Thicker line
+             ctx.lineJoin = 'round';
+             ctx.lineCap = 'round';
+
+             if (pattern.length === 0) {
+                 animationFrameId = requestAnimationFrame(draw);
+                 return;
+             }
+
+             let prevX = currentX % canvas.width;
+             let prevY = pattern[patternStep % pattern.length];
+             ctx.moveTo(prevX, prevY);
+
+             for (let i = 1; i <= speed; i++) {
+                 const nextX = (currentX + i) % canvas.width;
+                 const nextY = pattern[(patternStep + i) % pattern.length];
+                 if (nextX > prevX) {
+                     ctx.lineTo(nextX, nextY);
+                 } else {
+                     ctx.stroke(); 
+                     ctx.beginPath();
+                     ctx.moveTo(nextX, nextY);
+                 }
+                 prevX = nextX;
+             }
+             ctx.stroke();
+
+             currentX += speed;
+             patternStep += speed;
+
+             animationFrameId = requestAnimationFrame(draw);
+        };
+
+        setup();
+        draw();
+        
+        const resizeObserver = new ResizeObserver(() => {
+          setup();
+        });
+        if (canvas.parentElement) {
+            resizeObserver.observe(canvas.parentElement);
         }
-        .animate-firework {
-          animation: firework 0.6s ease-out forwards;
-        }
-      `}</style>
-    </div>
-  );
+
+        return () => {
+            cancelAnimationFrame(animationFrameId);
+            if (canvas.parentElement) {
+                resizeObserver.unobserve(canvas.parentElement);
+            }
+        };
+    }, []);
+
+    return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full opacity-80" />;
 };
+
+const ClickExplosion: React.FC<{ x: number; y: number; onComplete: () => void }> = ({ x, y, onComplete }) => {
+    useEffect(() => {
+        const timer = setTimeout(onComplete, 800);
+        return () => clearTimeout(timer);
+    }, [onComplete]);
+
+    return (
+        <div 
+            className="fixed pointer-events-none z-50" 
+            style={{ left: x, top: y, transform: 'translate(-50%, -50%)' }}
+        >
+             {/* Central Burst */}
+             <div className="absolute inset-0 rounded-full animate-ping bg-yellow-400 w-8 h-8 opacity-75"></div>
+             
+             {/* Particles */}
+             {Array.from({ length: 12 }).map((_, i) => (
+                 <div
+                    key={i}
+                    className="absolute w-2 h-2 rounded-full bg-cyan-400"
+                    style={{
+                        transform: `rotate(${i * 30}deg) translate(0, 0)`,
+                        animation: `particle-burst-${i} 0.6s ease-out forwards`
+                    }}
+                 />
+             ))}
+             
+             <style>{`
+                ${Array.from({ length: 12 }).map((_, i) => `
+                    @keyframes particle-burst-${i} {
+                        0% { transform: rotate(${i * 30}deg) translate(0, 0) scale(1); opacity: 1; }
+                        100% { transform: rotate(${i * 30}deg) translate(${40 + Math.random() * 40}px, 0) scale(0); opacity: 0; }
+                    }
+                `).join('')}
+             `}</style>
+        </div>
+    );
+};
+
+// --- Home Button Component (Level 3 Style) ---
+const RingHomeButton: React.FC<{ onClick: () => void, className?: string }> = ({ onClick, className = "" }) => (
+    <button
+      onClick={onClick}
+      className={`group relative w-14 h-14 rounded-full flex items-center justify-center bg-white shadow-xl transition-transform hover:scale-110 focus:outline-none z-30 ${className}`}
+      aria-label="Home"
+    >
+      <span className="absolute inset-0 rounded-full border-2 border-cyan-200 opacity-70 group-hover:border-cyan-500 group-hover:opacity-100 transition-all duration-300"></span>
+      <span className="absolute -inset-1 rounded-full border border-cyan-100 opacity-40 group-hover:scale-110 group-hover:opacity-60 transition-all duration-500 ease-out"></span>
+      <HomeIcon className="w-8 h-8 text-cyan-600 group-hover:text-cyan-700 transition-colors" />
+    </button>
+);
 
 
 // --- Main Level 5 Component ---
@@ -49,751 +186,457 @@ interface Level5Props {
   saveLevelCompletion: (levelId: string, stars: number) => void;
 }
 
+interface PeripheralPatch {
+    id: string;
+    type: 'gabor' | 'fake';
+    size: number;
+    x: number; // Percent 0-100
+    y: number; // Percent 0-100 (Relative to container)
+    side: 'top' | 'bottom';
+}
+
+interface CentralPatch {
+    id: string;
+    type: 'gabor' | 'fake';
+    size: number;
+    x: number; // Percent 0-100
+    y: number; // Percent 0-100
+}
+
+interface Explosion {
+    id: string;
+    x: number;
+    y: number;
+}
+
 const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
-    const [gameState, setGameState] = useState<'playing' | 'paused' | 'gameOver' | 'pausedManually'>('playing');
+    const [gameState, setGameState] = useState<'playing' | 'input' | 'gameOver' | 'pausedManually'>('playing');
     const [showExitConfirm, setShowExitConfirm] = useState(false);
     
     // Scores
-    const [ecgScore, setEcgScore] = useState(0);
-    const [quizScore, setQuizScore] = useState(0);
-    const [ecgHighScore, setEcgHighScore] = useState(0);
-    const [quizHighScore, setQuizHighScore] = useState(0);
-    const [highScore, setHighScore] = useState(0); // Total high score
-    const totalScore = ecgScore + quizScore;
-    const [scoreUpdate, setScoreUpdate] = useState<{ ecg?: boolean; quiz?: boolean; total?: boolean }>({});
-
-    // Lives
-    const [ecgLives, setEcgLives] = useState(3);
-    const [quizLives, setQuizLives] = useState(3);
-    const [justLostLife, setJustLostLife] = useState<{ ecg?: number; quiz?: number }>({});
+    const [centralScore, setCentralScore] = useState(0); 
+    const [peripheralScore, setPeripheralScore] = useState(0);
     
+    // Lives - Split into Central and Peripheral
+    const [centralLives, setCentralLives] = useState(3);
+    const [peripheralLives, setPeripheralLives] = useState(3);
+    
+    // Central Counting Task Logic
+    const [centralInputValue, setCentralInputValue] = useState('');
+    const [roundTimeLeft, setRoundTimeLeft] = useState(0);
+    const [isRoundActive, setIsRoundActive] = useState(false);
+    const [centralPatches, setCentralPatches] = useState<CentralPatch[]>([]);
+    
+    // Peripheral Logic
+    const [peripheralPatches, setPeripheralPatches] = useState<PeripheralPatch[]>([]);
     const [contrast, setContrast] = useState(1.0);
-    const [gameOverReason, setGameOverReason] = useState<'quiz' | 'clicks' | null>(null);
-  
-    const [ecgPatches, setEcgPatches] = useState<any[]>([]);
-    const [fireworks, setFireworks] = useState<{ x: number; y: number } | null>(null);
-  
-    // Side Patches
-    const [sidePatches, setSidePatches] = useState<{top: any | null, bottom: any | null}>({ top: null, bottom: null });
-    const [gaborOnSideCount, setGaborOnSideCount] = useState(0);
-  
-    // Quiz
-    const [isQuizVisible, setIsQuizVisible] = useState(false);
-    const [quizInputValue, setQuizInputValue] = useState("");
-    const [isQuizIncorrect, setIsQuizIncorrect] = useState(false);
-    const [quizFeedback, setQuizFeedback] = useState<'none' | 'incorrect'>('none');
-    const [lastQuizAttempt, setLastQuizAttempt] = useState<{ userAnswer: number; correctAnswer: number } | null>(null);
-  
-    const gameTickRef = useRef<number | null>(null);
-    const ecgPatchRefreshRef = useRef<number | null>(null);
-    const quizTimerRef = useRef<number | null>(null);
-    const quizIncorrectTimerRef = useRef<number | null>(null);
-    const middlePanelRef = useRef<HTMLDivElement>(null);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const [explosions, setExplosions] = useState<Explosion[]>([]);
 
-    const prevEcgScoreRef = useRef(ecgScore);
-    const prevQuizScoreRef = useRef(quizScore);
-    const prevEcgLivesRef = useRef(ecgLives);
-    const prevQuizLivesRef = useRef(quizLives);
+    // Refs
+    const roundTimerRef = useRef<number | null>(null);
+    const centralSpawnTimerRef = useRef<number | null>(null);
+    const peripheralSpawnTimerRef = useRef<number | null>(null);
+    const targetCounterRef = useRef(0);
 
-    // Ref to break dependency cycle causing game resets
-    const totalScoreRef = useRef(totalScore);
-    totalScoreRef.current = totalScore;
-
-    const animationData = useRef({
-        pattern: [] as number[],
-        featureIndices: [] as { type: string, index: number }[],
-        currentPatches: [] as any[],
-        isSetup: false,
-    }).current;
-
-    // --- Life Management Effects ---
-
-    // Effect for handling ECG life loss side-effects
-    useEffect(() => {
-        if (prevEcgLivesRef.current > ecgLives) {
-            const lostLifeIndex = ecgLives;
-            
-            setJustLostLife({ ecg: lostLifeIndex });
-            setTimeout(() => setJustLostLife({}), 600);
-
-            if (middlePanelRef.current) {
-                middlePanelRef.current.classList.add('animate-shake');
-                setTimeout(() => {
-                    middlePanelRef.current?.classList.remove('animate-shake');
-                }, 820);
-            }
-
-            if (ecgLives <= 0) {
-                setTimeout(() => {
-                    setGameOverReason('clicks');
-                    setGameState('gameOver');
-                }, 820);
-            }
-        }
-        prevEcgLivesRef.current = ecgLives;
-    }, [ecgLives]);
-
-    // Effect for handling Quiz life loss side-effects
-    useEffect(() => {
-        if (prevQuizLivesRef.current > quizLives) {
-            setJustLostLife({ quiz: quizLives });
-            const justLostLifeTimer = window.setTimeout(() => setJustLostLife({}), 600);
-
-            setIsQuizIncorrect(true);
-            
-            if (quizIncorrectTimerRef.current) {
-                clearTimeout(quizIncorrectTimerRef.current);
-            }
-
-            if (quizLives <= 0) {
-                quizIncorrectTimerRef.current = window.setTimeout(() => {
-                    setGameOverReason('quiz');
-                    setGameState('gameOver');
-                    setIsQuizVisible(false);
-                }, 820);
-            } else {
-                quizIncorrectTimerRef.current = window.setTimeout(() => {
-                    setIsQuizIncorrect(false);
-                    setQuizFeedback('incorrect');
-                }, 820);
-            }
-        }
-        prevQuizLivesRef.current = quizLives;
-        
-        return () => {
-            if (quizIncorrectTimerRef.current) {
-                clearTimeout(quizIncorrectTimerRef.current);
-            }
-        }
-    }, [quizLives]);
-
-    // Update High Scores
-    useEffect(() => {
-        if (ecgScore > ecgHighScore) {
-            setEcgHighScore(ecgScore);
-        }
-    }, [ecgScore, ecgHighScore]);
-
-    useEffect(() => {
-        if (quizScore > quizHighScore) {
-            setQuizHighScore(quizScore);
-        }
-    }, [quizScore, quizHighScore]);
-
-    useEffect(() => {
-        if (totalScore > highScore) {
-            setHighScore(totalScore);
-        }
-    }, [totalScore, highScore]);
-    
-    // Effect to handle score update animations
-    useEffect(() => {
-        const ecgIncreased = ecgScore > prevEcgScoreRef.current;
-        const quizIncreased = quizScore > prevQuizScoreRef.current;
-
-        if (ecgIncreased || quizIncreased) {
-            setScoreUpdate({
-                ecg: ecgIncreased,
-                quiz: quizIncreased,
-                total: true
-            });
-            const timer = setTimeout(() => {
-                setScoreUpdate({});
-            }, 500);
-            
-            prevEcgScoreRef.current = ecgScore;
-            prevQuizScoreRef.current = quizScore;
-
-            return () => clearTimeout(timer);
-        }
-        
-        // Handle score reset
-        if (ecgScore === 0 && prevEcgScoreRef.current !== 0) {
-            prevEcgScoreRef.current = 0;
-        }
-        if (quizScore === 0 && prevQuizScoreRef.current !== 0) {
-            prevQuizScoreRef.current = 0;
-        }
-    }, [ecgScore, quizScore]);
-
-    const getEcgPattern = useCallback((midY: number, baseAmplitude: number) => {
-      const p: number[] = [];
-      const featureIndices: { type: string; index: number }[] = [];
-      const addSegment = (length: number, yFunc: (i: number) => number) => {
-        for (let i = 0; i < length; i++) p.push(yFunc(i));
-      };
-      
-      const oneBeat = (amplitude: number) => {
-        const beatStartIndex = p.length;
-        // P wave (up)
-        featureIndices.push({ type: 'P', index: beatStartIndex + 5 });
-        addSegment(10, i => midY - (Math.sin(i / 10 * Math.PI) * 10 * amplitude));
-        addSegment(5, () => midY);
-        // Q wave (down)
-        featureIndices.push({ type: 'Q', index: p.length + 4 });
-        addSegment(5, i => midY + (i * 2.5 * amplitude));
-        // R wave (up) - Reduced Height
-        featureIndices.push({ type: 'R', index: p.length + 9 });
-        addSegment(10, i => midY + (12.5 * amplitude) - (i * 7.5 * amplitude));
-        // S wave (down)
-        featureIndices.push({ type: 'S', index: p.length + 9 });
-        addSegment(10, i => (midY - 55 * amplitude) + (i * 9 * amplitude));
-        addSegment(5, i => (midY + 26 * amplitude) - (i * 6.5 * amplitude));
-        // T wave (up)
-        featureIndices.push({ type: 'T', index: p.length + 10 });
-        addSegment(20, i => midY - (Math.sin(i / 20 * Math.PI) * 35 * amplitude));
-        addSegment(5, () => midY);
-      };
-
-      for(let i = 0; i < 20; i++) {
-        const randomAmplitude = baseAmplitude * (0.8 + Math.random() * 0.4);
-        const baselineLength = Math.floor(40 + Math.random() * 60);
-        addSegment(baselineLength, () => midY);
-        oneBeat(randomAmplitude);
-      }
-      return { pattern: p, featureIndices };
-    }, []);
-
-    const generateNewPatches = useCallback(() => {
-        if (animationData.featureIndices.length === 0) return;
-        
-        const numPatches = 8;
-        const newPatches = [];
-        const distractorSizes = [20, 25, 30, 35, 22, 28, 32, 18, 38];
-        const targetSize = 45;
-        
-        const targetPatchIndex = Math.floor(Math.random() * numPatches);
-
-        const availableIndices = [...animationData.featureIndices];
-        for (let i = availableIndices.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [availableIndices[i], availableIndices[j]] = [availableIndices[j], availableIndices[i]];
-        }
-
-        for (let i = 0; i < numPatches; i++) {
-            if (availableIndices.length === 0) break;
-            const selectedFeature = availableIndices.pop();
-            if (!selectedFeature) break;
-
-            const isTarget = i === targetPatchIndex;
-            const size = isTarget ? targetSize : distractorSizes[Math.floor(Math.random() * distractorSizes.length)];
-
-            newPatches.push({
-                id: `ecg-${Date.now()}-${i}`,
-                featureIndex: selectedFeature.index,
-                size: size,
-                isTarget: isTarget,
-            });
-        }
-        animationData.currentPatches = newPatches;
-    }, [animationData]);
-
-    const handleEcgPatchClick = (patch: any, event: React.MouseEvent) => {
-        if (gameState !== 'playing') return;
-
-        if (patch.isTarget) {
-            setEcgScore(prev => prev + 1);
-            setFireworks({ x: event.clientX, y: event.clientY });
-            setTimeout(() => setFireworks(null), 600);
-            generateNewPatches();
-        } else {
-            setEcgLives(prev => Math.max(0, prev - 1));
-        }
-    };
-
-    useEffect(() => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      let animationFrameId: number;
-      let currentX = 0;
-      let patternStep = 0;
-
-      const setup = () => {
-        const parent = canvas.parentElement;
-        if (!parent) return;
-        canvas.width = parent.offsetWidth;
-        canvas.height = parent.offsetHeight;
-        const baseAmplitude = Math.min(canvas.height / 180, 2.5);
-        const { pattern, featureIndices } = getEcgPattern(canvas.height / 2, baseAmplitude);
-        animationData.pattern = pattern;
-        animationData.featureIndices = featureIndices;
-        generateNewPatches();
-        currentX = 0;
-        patternStep = 0;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        animationData.isSetup = true;
-      };
-
-      const draw = () => {
-        if (!animationData.isSetup || gameState !== 'playing') {
-          animationFrameId = requestAnimationFrame(draw);
-          return;
-        }
-        const speed = 3;
-        
-        const clearX = (currentX + speed + 8) % canvas.width;
-        ctx.clearRect(clearX, 0, 20, canvas.height);
-
-        ctx.beginPath();
-        ctx.strokeStyle = '#ff0000';
-        ctx.lineWidth = 3;
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-
-        let prevX = currentX % canvas.width;
-        let prevY = animationData.pattern[patternStep % animationData.pattern.length];
-        ctx.moveTo(prevX, prevY);
-
-        for (let i = 1; i <= speed; i++) {
-            const nextX = (currentX + i) % canvas.width;
-            const nextY = animationData.pattern[(patternStep + i) % animationData.pattern.length];
-            if (nextX > prevX) {
-                ctx.lineTo(nextX, nextY);
-            } else {
-                ctx.stroke(); 
-                ctx.beginPath();
-                ctx.moveTo(nextX, nextY);
-            }
-            prevX = nextX;
-        }
-        ctx.stroke();
-        
-        const patchesOnScreen = animationData.currentPatches.map(p => {
-          const x = (p.featureIndex - patternStep + currentX);
-          const finalX = (x % canvas.width + canvas.width) % canvas.width; // Ensure positive value
-          const y = animationData.pattern[p.featureIndex % animationData.pattern.length];
-          return { ...p, x: finalX, y };
-        });
-        setEcgPatches(patchesOnScreen);
-
-        currentX += speed;
-        patternStep += speed;
-
-        animationFrameId = requestAnimationFrame(draw);
-      };
-  
-      setup();
-      draw();
-  
-      const resizeObserver = new ResizeObserver(() => {
-          cancelAnimationFrame(animationFrameId);
-          setup();
-          draw();
-      });
-      if (canvas.parentElement) {
-          resizeObserver.observe(canvas.parentElement);
-      }
-  
-      return () => {
-        cancelAnimationFrame(animationFrameId);
-        if (canvas.parentElement) {
-            resizeObserver.unobserve(canvas.parentElement);
-        }
-      };
-    }, [animationData, getEcgPattern, generateNewPatches, gameState]);
-
-    const scheduleQuiz = useCallback(() => {
-        if (quizTimerRef.current) clearTimeout(quizTimerRef.current);
-        
-        const score = totalScoreRef.current;
-        let time;
-
-        if (score <= 25) {
-            time = 5000 + Math.random() * 5000;
-        } else if (score <= 50) {
-            time = 10000 + Math.random() * 10000;
-        } else if (score <= 100) {
-            time = 20000 + Math.random() * 10000;
-        } else {
-            time = 30000 + Math.random() * 30000;
-        }
-
-        quizTimerRef.current = window.setTimeout(() => {
-            setQuizInputValue("");
-            setGameState('paused');
-            setIsQuizVisible(true);
-        }, time);
-    }, []);
-
-    const generateSidePatches = useCallback(() => {
-        const newPatches: { top: any | null; bottom: any | null } = { top: null, bottom: null };
-        let gaborCountThisTurn = 0;
-        const score = totalScoreRef.current;
-
-        if (Math.random() > 0.3) {
-            const type = Math.random() > 0.5 ? 'gabor' : 'fake';
-            if (type === 'gabor') gaborCountThisTurn++;
-            newPatches.top = { id: `side-top-${Date.now()}`, type, size: Math.random() * 50 + 40 };
-        }
-
-        if (Math.random() > 0.3) {
-            let type = Math.random() > 0.5 ? 'gabor' : 'fake';
-            if (score <= 50 && newPatches.top?.type === 'gabor') type = 'fake';
-            if (type === 'gabor') gaborCountThisTurn++;
-            newPatches.bottom = { id: `side-bottom-${Date.now()}`, type, size: Math.random() * 50 + 40 };
-        }
-        
-        setGaborOnSideCount(prev => prev + gaborCountThisTurn);
-        setSidePatches(newPatches);
-    }, []);
-    
-    const resumeGameFromPause = useCallback((options?: { delayPeripheral?: number }) => {
-        const { delayPeripheral = 0 } = options || {};
-
+    // Start a new counting round
+    const startCentralRound = useCallback(() => {
+        const duration = Math.floor(Math.random() * 30) + 20; 
+        setRoundTimeLeft(duration);
+        targetCounterRef.current = 0;
+        setCentralPatches([]);
+        setIsRoundActive(true);
+        setCentralInputValue('');
         setGameState('playing');
-        scheduleQuiz();
 
-        if (ecgPatchRefreshRef.current) clearInterval(ecgPatchRefreshRef.current);
-        ecgPatchRefreshRef.current = window.setInterval(() => {
-            generateNewPatches();
-        }, 5000);
-        
-        if (gameTickRef.current) clearInterval(gameTickRef.current);
+        if (roundTimerRef.current) clearInterval(roundTimerRef.current);
+        roundTimerRef.current = window.setInterval(() => {
+            setRoundTimeLeft(prev => {
+                if (prev <= 1) {
+                    clearInterval(roundTimerRef.current!);
+                    clearInterval(centralSpawnTimerRef.current!);
+                    setCentralPatches([]);
+                    setGameState('input');
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
 
-        setTimeout(() => {
-            generateSidePatches();
-            gameTickRef.current = window.setInterval(() => {
-                setContrast(prev => Math.max(0.1, prev - 0.005));
-                generateSidePatches();
-            }, 3000);
-        }, delayPeripheral);
-    }, [scheduleQuiz, generateSidePatches, generateNewPatches]);
+        if (centralSpawnTimerRef.current) clearInterval(centralSpawnTimerRef.current);
+        const spawnLoop = () => {
+            const nextSpawnTime = Math.random() * 2000 + 500; 
+            centralSpawnTimerRef.current = window.setTimeout(() => {
+                if (gameState !== 'playing' && gameState !== 'input') return; 
+                
+                const isTarget = Math.random() > 0.6;
+                const size = Math.random() * 80 + 80;
+                const id = `c-${Date.now()}`;
+                
+                const newPatch: CentralPatch = {
+                    id,
+                    type: isTarget ? 'gabor' : 'fake',
+                    size,
+                    x: Math.random() * 80 + 10,
+                    y: Math.random() * 80 + 10
+                };
 
-    const closeQuizAndReset = useCallback(() => {
-        setIsQuizVisible(false);
-        setQuizFeedback('none');
-        setQuizInputValue("");
-        setGaborOnSideCount(0);
-        setLastQuizAttempt(null);
-    }, []);
+                if (isTarget) targetCounterRef.current += 1;
 
-    const startGame = useCallback(() => {
-        setEcgScore(0);
-        setQuizScore(0);
-        setContrast(1.0);
-        setGaborOnSideCount(0);
-        setEcgPatches([]);
-        setSidePatches({ top: null, bottom: null });
-        setGameState('playing');
-        setEcgLives(3);
-        setQuizLives(3);
-        prevEcgLivesRef.current = 3;
-        prevQuizLivesRef.current = 3;
-        setGameOverReason(null);
-        setQuizFeedback('none');
-        setLastQuizAttempt(null);
-        
-        generateNewPatches();
-        generateSidePatches();
-        scheduleQuiz();
+                setCentralPatches(prev => [...prev, newPatch]);
 
-        if (gameTickRef.current) clearInterval(gameTickRef.current);
-        gameTickRef.current = window.setInterval(() => {
-            setContrast(prev => Math.max(0.1, prev - 0.005));
-            generateSidePatches();
-        }, 3000);
+                setTimeout(() => {
+                    setCentralPatches(prev => prev.filter(p => p.id !== id));
+                }, 1000);
 
-        if (ecgPatchRefreshRef.current) clearInterval(ecgPatchRefreshRef.current);
-        ecgPatchRefreshRef.current = window.setInterval(() => {
-            generateNewPatches();
-        }, 5000);
-
-    }, [generateNewPatches, generateSidePatches, scheduleQuiz]);
-
-
-    useEffect(() => {
-        startGame();
-        return () => {
-            if (gameTickRef.current) clearInterval(gameTickRef.current);
-            if (quizTimerRef.current) clearTimeout(quizTimerRef.current);
-            if (ecgPatchRefreshRef.current) clearInterval(ecgPatchRefreshRef.current);
+                if (roundTimeLeft > 1) spawnLoop();
+            }, nextSpawnTime);
         };
-    }, [startGame]);
+        spawnLoop();
 
-    useEffect(() => {
-        if (gameState !== 'playing') {
-            if (gameTickRef.current) clearInterval(gameTickRef.current);
-            if (quizTimerRef.current) clearTimeout(quizTimerRef.current);
-            if (ecgPatchRefreshRef.current) clearInterval(ecgPatchRefreshRef.current);
-        }
     }, [gameState]);
 
-    const handleQuizSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
+    // Peripheral Spawning Logic - Refreshes every 5 seconds
+    const spawnPeripheral = useCallback(() => {
+        const newPatches: PeripheralPatch[] = [];
+        const timestamp = Date.now();
+        
+        // Decide target location (50/50 Top or Bottom)
+        const targetSide = Math.random() > 0.5 ? 'top' : 'bottom';
+        const targetId = `p-target-${timestamp}`;
 
-        const userAnswer = parseInt(quizInputValue, 10) || 0;
-        const isCorrect = userAnswer === gaborOnSideCount;
-
-        if (isCorrect) {
-            setQuizScore(prev => prev + 1);
-            closeQuizAndReset();
-            setSidePatches({ top: null, bottom: null });
-            resumeGameFromPause({ delayPeripheral: 1000 });
-        } else {
-            setLastQuizAttempt({ userAnswer, correctAnswer: gaborOnSideCount });
-            setQuizLives(prev => Math.max(0, prev - 1));
+        // Add Target
+        newPatches.push({
+            id: targetId,
+            type: 'gabor',
+            size: Math.random() * 30 + 40, // 40-70px
+            x: Math.random() * 80 + 10,
+            y: Math.random() * 60 + 20, // Avoid extreme edges vertically
+            side: targetSide
+        });
+        
+        // Add Fake Patches (Distractors) for BOTH sides
+        // Top Distractors
+        const topCount = Math.floor(Math.random() * 3) + 2; // 2-4 patches
+        for(let i=0; i<topCount; i++) {
+             newPatches.push({
+                id: `p-fake-top-${timestamp}-${i}`,
+                type: 'fake',
+                size: Math.random() * 40 + 20, // 20-60px varied sizes
+                x: Math.random() * 90 + 5,
+                y: Math.random() * 60 + 20,
+                side: 'top'
+            });
         }
-    };
 
-    const renderSidePatch = (patch: any) => {
-        if (!patch) return null;
-        const style = {
-            position: 'absolute' as const,
-            left: '50%',
-            top: '50%',
-            transform: 'translate(-50%, -50%)',
-            opacity: contrast,
+        // Bottom Distractors
+        const bottomCount = Math.floor(Math.random() * 3) + 2;
+        for(let i=0; i<bottomCount; i++) {
+             newPatches.push({
+                id: `p-fake-bot-${timestamp}-${i}`,
+                type: 'fake',
+                size: Math.random() * 40 + 20,
+                x: Math.random() * 90 + 5,
+                y: Math.random() * 60 + 20,
+                side: 'bottom'
+            });
+        }
+        
+        setPeripheralPatches(newPatches);
+    }, []);
+
+    // Main Game Loop management
+    useEffect(() => {
+        if (gameState === 'playing') {
+            if (!isRoundActive) {
+                startCentralRound();
+            }
+
+            // Peripheral Loop - Refresh every 5 seconds
+            spawnPeripheral(); // Initial spawn
+            if (peripheralSpawnTimerRef.current) clearInterval(peripheralSpawnTimerRef.current);
+            peripheralSpawnTimerRef.current = window.setInterval(() => {
+                spawnPeripheral();
+            }, 5000); 
+            
+        } else {
+            if (roundTimerRef.current) clearInterval(roundTimerRef.current);
+            if (centralSpawnTimerRef.current) clearTimeout(centralSpawnTimerRef.current);
+            if (peripheralSpawnTimerRef.current) clearInterval(peripheralSpawnTimerRef.current);
+        }
+
+        return () => {
+            if (roundTimerRef.current) clearInterval(roundTimerRef.current);
+            if (centralSpawnTimerRef.current) clearTimeout(centralSpawnTimerRef.current);
+            if (peripheralSpawnTimerRef.current) clearInterval(peripheralSpawnTimerRef.current);
         };
+    }, [gameState, isRoundActive, startCentralRound, spawnPeripheral]);
 
+
+    const handlePeripheralClick = (patch: PeripheralPatch, e: React.MouseEvent) => {
+        if (gameState !== 'playing') return;
+        
         if (patch.type === 'gabor') {
-            return <GaborCircle size={patch.size} contrast={contrast} onClick={() => {}} style={style} />;
+            // Correct Click
+            setPeripheralScore(prev => prev + 1); // 1 point per touch
+            
+            // Trigger Explosion
+            const id = `exp-${Date.now()}`;
+            setExplosions(prev => [...prev, { id, x: e.clientX, y: e.clientY }]);
+            
+            // Remove the clicked patch so it doesn't get clicked again in this cycle
+            setPeripheralPatches(prev => prev.filter(p => p.id !== patch.id));
+
         } else {
-            return <div style={{...style, width: patch.size, height: patch.size, backgroundColor: 'grey', borderRadius: '50%'}} />;
+            // Fake Click - Decrease Peripheral Lives
+            setPeripheralLives(prev => {
+                const newLives = prev - 1;
+                if (newLives <= 0) setGameState('gameOver');
+                return newLives;
+            });
         }
     };
-    
-    const handleExitRequest = useCallback(() => {
-      setGameState('pausedManually');
-      setShowExitConfirm(true);
-    }, []);
-  
-    const handleConfirmExit = useCallback(() => {
-      setShowExitConfirm(false);
-      setCurrentPage('home');
-    }, [setCurrentPage]);
-  
-    const handleCancelExit = useCallback(() => {
-      setShowExitConfirm(false);
-      setGameState('playing'); // Or resume previous state
-    }, []);
+
+    const handleCentralSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const count = parseInt(centralInputValue);
+        const actual = targetCounterRef.current;
+        const diff = Math.abs(count - actual);
+        
+        if (diff === 0) {
+            setCentralScore(prev => prev + 100);
+        } else if (diff <= 1 && actual > 5) {
+            setCentralScore(prev => prev + 50); 
+        } else {
+             // Wrong count - Decrease Central Lives
+             setCentralLives(prev => {
+                const newLives = prev - 1;
+                if (newLives <= 0) setGameState('gameOver');
+                return newLives;
+            });
+        }
+        setIsRoundActive(false); 
+        setGameState('playing');
+        setCentralInputValue('');
+    };
+
+    const handleHomeClick = () => {
+        setGameState('pausedManually');
+        setShowExitConfirm(true);
+    };
+
+    const handleConfirmExit = () => {
+        setCurrentPage('home');
+    };
+
+    const handleCancelExit = () => {
+        setShowExitConfirm(false);
+        if (gameState === 'pausedManually') {
+            setGameState('playing');
+        }
+    };
+
+    const retryLevel = () => {
+        setCentralLives(3);
+        setPeripheralLives(3);
+        setCentralScore(0);
+        setPeripheralScore(0);
+        setCentralPatches([]);
+        setPeripheralPatches([]);
+        setIsRoundActive(false);
+        setGameState('playing');
+    };
+
+    // --- Render ---
+
+    const renderPeripheralArea = (side: 'top' | 'bottom') => {
+        const patches = peripheralPatches.filter(p => p.side === side);
+        return (
+             <div className={`flex-1 relative bg-black flex items-center justify-center overflow-hidden border-${side === 'top' ? 'b' : 't'} border-slate-700`}>
+                <SimpleECGCanvas />
+                {patches.map(patch => (
+                    <div 
+                        key={patch.id}
+                        className="absolute animate-pop-in z-20"
+                        style={{ left: `${patch.x}%`, top: `${patch.y}%`, transform: 'translate(-50%, -50%)' }}
+                    >
+                         <GaborCircle 
+                             size={patch.size} 
+                             contrast={patch.type === 'gabor' ? contrast : contrast * 0.2}
+                             onClick={(e) => handlePeripheralClick(patch, e)}
+                             style={patch.type === 'fake' ? { backgroundImage: 'none', backgroundColor: '#333' } : { boxShadow: '0 0 10px rgba(255,255,255,0.5)' }}
+                         />
+                    </div>
+                ))}
+             </div>
+        );
+    };
 
     return (
-        <div className="flex flex-col h-screen w-screen bg-black font-sans">
-            <style>{`
-                @keyframes score-update {
-                    0% { transform: scale(1); }
-                    50% { transform: scale(1.25); color: #22c55e; }
-                    100% { transform: scale(1); }
-                }
-                .animate-score-update {
-                    animation: score-update 0.5s ease-in-out;
-                    display: inline-block;
-                }
-                @keyframes heart-break {
-                  0% { transform: scale(1.2); opacity: 1; }
-                  50% { transform: scale(1.5) rotate(10deg); opacity: 0.8; }
-                  100% { transform: scale(0.5); opacity: 0; }
-                }
-                .animate-heart-break {
-                  animation: heart-break 0.6s ease-out forwards;
-                }
-            `}</style>
-             {/* --- UI Panels --- */}
-            <div className="absolute top-4 left-4 z-20 text-slate-700 bg-gradient-to-br from-white to-cyan-100 p-3 rounded-2xl shadow-lg border border-cyan-200/50 w-56">
-                <p className="font-bold text-lg text-cyan-800">Central Vision Task</p>
-                <p className="font-semibold">Score: <span className={scoreUpdate.ecg ? 'animate-score-update' : ''}>{ecgScore}</span></p>
-                <div className="flex items-center mt-1 gap-1">
-                    {Array.from({ length: 3 }).map((_, i) => {
-                        const isLost = i >= ecgLives;
-                        const wasJustLost = justLostLife.ecg === i;
-                        if (wasJustLost) {
-                            return <HeartIcon key={i} className="w-5 h-5 text-red-500 animate-heart-break" />;
-                        }
-                        return isLost ? (
-                            <HeartOutlineIcon key={i} className="w-5 h-5 text-red-500/70" />
-                        ) : (
-                            <HeartIcon key={i} className="w-5 h-5 text-red-500" />
-                        );
-                    })}
-                </div>
-                 <p className="text-xs mt-1 text-slate-500">High Score: {ecgHighScore}</p>
-            </div>
+        <div className="flex flex-col h-screen w-full bg-slate-50 font-sans select-none overflow-hidden relative">
+            
+            {/* --- Header --- */}
+            <header className="flex-none p-3 bg-gradient-to-r from-cyan-600 to-teal-400 shadow-md z-10 flex justify-between items-center text-white">
+                 <div className="flex items-center gap-6">
+                     <RingHomeButton onClick={handleHomeClick} />
+                     
+                     {/* Score placed to the right of the home button as requested */}
+                     <div className="flex flex-col">
+                           <div className="text-3xl font-bold leading-none drop-shadow-md">
+                               {centralScore + peripheralScore}
+                           </div>
+                           <div className="text-xs font-bold text-cyan-100 uppercase tracking-wide">
+                               Score
+                           </div>
+                      </div>
+                 </div>
 
-            <div className="absolute top-4 right-4 z-20 text-slate-700 bg-gradient-to-br from-white to-cyan-100 p-3 rounded-2xl shadow-lg border border-cyan-200/50 w-56 text-right">
-                <p className="font-bold text-lg text-cyan-800">Peripheral Vision Task</p>
-                <p className="font-semibold">Score: <span className={scoreUpdate.quiz ? 'animate-score-update' : ''}>{quizScore}</span></p>
-                <div className="flex items-center justify-end mt-1 gap-1">
-                    {Array.from({ length: 3 }).map((_, i) => {
-                        const isLost = i >= quizLives;
-                        const wasJustLost = justLostLife.quiz === i;
-                        if (wasJustLost) {
-                            return <HeartIcon key={i} className="w-5 h-5 text-red-500 animate-heart-break" />;
-                        }
-                        return isLost ? (
-                           <HeartOutlineIcon key={i} className="w-5 h-5 text-red-500/70" />
-                        ) : (
-                           <HeartIcon key={i} className="w-5 h-5 text-red-500" />
-                        );
-                    })}
-                </div>
-                 <p className="text-xs mt-1 text-slate-500">High Score: {quizHighScore}</p>
-            </div>
-            
-            <div className="absolute bottom-4 left-4 z-20 text-slate-700 bg-gradient-to-br from-white to-cyan-100 p-3 rounded-xl shadow-lg border border-cyan-200/50">
-                <p className="font-semibold text-gray-600 text-sm">Total Score</p>
-                <p className={`font-bold text-2xl ${scoreUpdate.total ? 'animate-score-update' : ''}`}>{totalScore}</p>
-                <p className="text-xs mt-1 text-slate-500">High Score: {highScore}</p>
-            </div>
-            
-            <button
-                onClick={handleExitRequest}
-                className="absolute bottom-4 right-4 group w-14 h-14 rounded-full flex items-center justify-center bg-white shadow-xl transition-transform hover:scale-110 focus:outline-none z-30"
-                aria-label="Home"
-            >
-                 {/* Inner Ring */}
-                <span className="absolute inset-0 rounded-full border-2 border-cyan-200 opacity-70 group-hover:border-cyan-500 group-hover:opacity-100 transition-all duration-300"></span>
-                {/* Outer Pulse Ring */}
-                <span className="absolute -inset-1 rounded-full border border-cyan-100 opacity-40 group-hover:scale-110 group-hover:opacity-60 transition-all duration-500 ease-out"></span>
-                <HomeIcon className="w-8 h-8 text-cyan-600 group-hover:text-cyan-700 transition-colors"/>
-            </button>
-            
-            {/* --- Game Areas --- */}
-            <div className="h-1/3 bg-white relative">{renderSidePatch(sidePatches.top)}</div>
-            
-            <div ref={middlePanelRef} className="h-1/3 bg-black relative overflow-hidden">
-                <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full" />
-                {ecgPatches.map(p => (
-                    <GaborCircle 
-                        key={p.id}
-                        size={p.size}
-                        contrast={contrast}
-                        onClick={(e) => handleEcgPatchClick(p, e)}
-                        style={{ position: 'absolute', top: p.y, left: p.x, transform: 'translate(-50%, -50%)', zIndex: 10 }}
-                    />
-                ))}
-            </div>
-            
-            <div className="h-1/3 bg-white relative">{renderSidePatch(sidePatches.bottom)}</div>
+                 {/* Lives separated into Central (Blue) and Peripheral (Red) */}
+                 <div className="flex gap-6 pr-2">
+                     {/* Central Lives (Blue) */}
+                     <div className="flex flex-col items-end">
+                         <div className="flex items-center gap-1 text-blue-300 font-bold text-lg">
+                             {Array.from({length:3}).map((_, i) => (
+                                 i < centralLives ? <HeartIcon key={i} className="w-6 h-6 fill-current text-blue-200 drop-shadow-sm"/> : <HeartOutlineIcon key={i} className="w-6 h-6 opacity-40 text-blue-200"/>
+                             ))}
+                         </div>
+                         <div className="text-[10px] font-bold text-cyan-50 uppercase mt-0.5 tracking-wider">
+                             Cen. Task
+                         </div>
+                     </div>
 
-            {fireworks && <Fireworks x={fireworks.x} y={fireworks.y} />}
+                     {/* Peripheral Lives (Red) */}
+                     <div className="flex flex-col items-end">
+                         <div className="flex items-center gap-1 text-rose-300 font-bold text-lg">
+                             {Array.from({length:3}).map((_, i) => (
+                                 i < peripheralLives ? <HeartIcon key={i} className="w-6 h-6 fill-current text-rose-200 drop-shadow-sm"/> : <HeartOutlineIcon key={i} className="w-6 h-6 opacity-40 text-rose-200"/>
+                             ))}
+                         </div>
+                         <div className="text-[10px] font-bold text-cyan-50 uppercase mt-0.5 tracking-wider">
+                             Peri. Task
+                         </div>
+                     </div>
+                  </div>
+            </header>
 
-            {/* --- Modals --- */}
-            {isQuizVisible && (
-                 <div className="absolute inset-0 bg-black/70 z-30 flex items-center justify-center p-4">
-                    {quizFeedback === 'incorrect' ? (
-                        <div className="bg-slate-800 text-white p-8 rounded-2xl shadow-lg border border-rose-500 w-full max-w-sm text-center">
-                            <h2 className="text-2xl font-bold mb-4 text-rose-400">Incorrect</h2>
-                            {lastQuizAttempt && (
-                                <div className="bg-slate-700/50 p-3 rounded-lg mb-4 text-center space-y-1 border border-slate-600">
-                                    <p className="text-slate-300 text-sm">Your answer: <span className="font-bold text-white text-lg">{lastQuizAttempt.userAnswer}</span></p>
-                                    <p className="text-slate-300 text-sm">Correct answer: <span className="font-bold text-white text-lg">{lastQuizAttempt.correctAnswer}</span></p>
-                                </div>
-                            )}
-                            <p className="text-slate-300 mb-6">Take a moment before you continue.</p>
-                            <button 
-                                onClick={() => { closeQuizAndReset(); resumeGameFromPause(); }}
-                                className="mb-6 w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-lg transition"
-                            >
-                                Continue
-                            </button>
-                            <div className="flex justify-center gap-8">
-                                <button 
-                                    onClick={() => setGameState('pausedManually')}
-                                    className="flex flex-col items-center text-slate-400 hover:text-cyan-400 transition"
-                                    aria-label="Pause Game"
-                                >
-                                    <PauseIcon className="w-10 h-10" />
-                                    <span className="text-xs mt-1 font-semibold">Pause</span>
-                                </button>
-                                <button 
-                                    onClick={handleExitRequest}
-                                    className="flex flex-col items-center text-slate-400 hover:text-white transition"
-                                    aria-label="Exit to Home"
-                                >
-                                    <HomeIcon className="w-10 h-10" />
-                                    <span className="text-xs mt-1 font-semibold">Exit</span>
-                                </button>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className={`bg-slate-800 text-white p-8 rounded-2xl shadow-lg border border-cyan-500 w-full max-w-sm text-center transition-transform duration-300 ${isQuizIncorrect ? 'animate-shake' : ''}`}>
-                            <h2 className="text-2xl font-bold mb-2 text-cyan-400">Time for a Check-in!</h2>
-                            <div className="flex justify-center gap-2 my-4">
-                                {Array.from({ length: 3 }).map((_, i) =>
-                                    i < quizLives ? (
-                                        <HeartIcon key={i} className="w-8 h-8 text-red-500" />
-                                    ) : (
-                                        <HeartOutlineIcon key={i} className="w-8 h-8 text-red-500/70" />
-                                    )
-                                )}
-                            </div>
-                            <p className="mb-6 text-slate-300">How many <strong className="text-white">correct pattern patches</strong> did you see in the top and bottom white areas?</p>
-                            <form onSubmit={handleQuizSubmit}>
-                                <input 
-                                    type="number"
-                                    value={quizInputValue}
-                                    onChange={(e) => setQuizInputValue(e.target.value)}
-                                    className="w-full p-3 rounded-lg bg-slate-700 text-white text-center text-2xl border-2 border-slate-600 focus:border-cyan-500 focus:outline-none"
-                                    autoFocus
-                                />
-                                <button 
-                                    type="submit" 
-                                    className={`mt-6 w-full font-bold py-3 rounded-lg transition ${
-                                        isQuizIncorrect 
-                                        ? 'bg-slate-600 text-slate-400' 
-                                        : 'bg-cyan-600 hover:bg-cyan-700 text-white'
-                                    }`}
-                                >
-                                    Submit Answer
-                                </button>
-                            </form>
-                        </div>
-                    )}
-                </div>
-            )}
+            {/* --- Main Game Area --- */}
+            <main className="flex-grow flex flex-col relative overflow-hidden">
+                 
+                 {/* Top Peripheral Area */}
+                 {renderPeripheralArea('top')}
 
-            {gameState === 'pausedManually' && !showExitConfirm && (
-                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-40 flex items-center justify-center">
-                    <div className="bg-slate-800 text-white p-8 rounded-2xl shadow-lg border border-cyan-500 w-full max-w-sm text-center">
-                        <h2 className="text-3xl font-bold mb-6 text-cyan-400">Game Paused</h2>
-                        <button 
-                            onClick={() => resumeGameFromPause()}
-                            className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-lg transition flex items-center justify-center text-lg gap-2"
-                        >
-                            <PlayIcon className="w-6 h-6" /> Resume
-                        </button>
-                        <button 
-                            onClick={handleExitRequest} 
-                            className="mt-4 w-full bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 rounded-lg transition"
-                        >
-                            Exit to Main Menu
-                        </button>
+                 {/* Middle Central Area (White + Patches) */}
+                 <div className="flex-1 relative bg-white flex items-center justify-center overflow-hidden border-y-4 border-slate-200">
+                     {/* Timer Bar */}
+                     {gameState === 'playing' && (
+                         <div className="absolute top-0 left-0 h-1 bg-cyan-500 transition-all duration-1000 ease-linear" style={{ width: `${(roundTimeLeft/60)*100}%` }}></div>
+                     )}
+
+                     {centralPatches.map(patch => (
+                         <div
+                             key={patch.id}
+                             className="absolute rounded-full"
+                             style={{
+                                 left: `${patch.x}%`,
+                                 top: `${patch.y}%`,
+                                 width: patch.size,
+                                 height: patch.size,
+                                 transform: 'translate(-50%, -50%)',
+                                 pointerEvents: 'none',
+                             }}
+                         >
+                             {patch.type === 'gabor' ? (
+                                 <GaborCircle 
+                                     size={patch.size}
+                                     contrast={1.0} 
+                                     onClick={()=>{}}
+                                     className="pointer-events-none shadow-xl"
+                                 />
+                             ) : (
+                                 <div className="w-full h-full rounded-full bg-slate-300 opacity-50" />
+                             )}
+                         </div>
+                     ))}
+                     
+                     {gameState === 'playing' && centralPatches.length === 0 && roundTimeLeft > 0 && (
+                         <div className="text-slate-300 text-xl font-bold opacity-20 select-none">Count the Gabor Patches...</div>
+                     )}
+                 </div>
+
+                 {/* Bottom Peripheral Area */}
+                 {renderPeripheralArea('bottom')}
+
+                 {/* Explosion Effects Layer */}
+                 {explosions.map(exp => (
+                     <ClickExplosion 
+                        key={exp.id} 
+                        x={exp.x} 
+                        y={exp.y} 
+                        onComplete={() => setExplosions(prev => prev.filter(e => e.id !== exp.id))} 
+                     />
+                 ))}
+
+            </main>
+
+            {/* --- Overlays --- */}
+
+            {/* Input Overlay */}
+            {gameState === 'input' && (
+                <div className="absolute inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+                    <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center animate-fade-in-up">
+                         <h2 className="text-2xl font-bold text-slate-700 mb-4">Round Complete!</h2>
+                         <p className="text-lg text-slate-500 mb-6">How many <span className="font-bold text-slate-800">Gabor Patches</span> appeared in the center?</p>
+                         <form onSubmit={handleCentralSubmit}>
+                             <input 
+                                 type="number" 
+                                 autoFocus
+                                 value={centralInputValue}
+                                 onChange={e => setCentralInputValue(e.target.value)}
+                                 className="w-full text-center text-4xl p-4 border-2 border-slate-300 rounded-xl focus:border-cyan-500 outline-none mb-6 font-bold text-slate-700"
+                                 placeholder="#"
+                             />
+                             <button type="submit" className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-4 rounded-xl transition text-xl shadow-lg shadow-cyan-500/30">
+                                 Submit Count
+                             </button>
+                         </form>
                     </div>
                 </div>
             )}
 
+            {/* Game Over Overlay */}
             {gameState === 'gameOver' && (
-                <div className="absolute inset-0 bg-black/90 z-30 flex items-center justify-center">
-                    <div className="bg-slate-800 text-white p-8 rounded-2xl shadow-lg border border-rose-500 w-full max-w-sm text-center">
-                        <h2 className="text-3xl font-bold mb-2 text-rose-500">Game Over</h2>
-                        <p className="text-lg mb-4 text-slate-300">
-                           {gameOverReason === 'quiz' ? 'You ran out of guesses.' : 'You made 3 incorrect clicks.'}
+                <div className="absolute inset-0 z-50 bg-slate-900/90 flex items-center justify-center p-4">
+                    <div className="bg-white p-8 rounded-2xl shadow-2xl text-center max-w-md w-full animate-fade-in-up">
+                        <XCircleIcon className="w-20 h-20 text-rose-500 mx-auto mb-4" />
+                        <h2 className="text-4xl font-bold text-slate-800 mb-2">Game Over</h2>
+                        <p className="text-slate-500 mb-6">
+                            {centralLives <= 0 ? "You failed the Central Task!" : "You failed the Peripheral Task!"}
                         </p>
-                        <div className="bg-slate-700 p-4 rounded-lg mb-6">
-                            <p className="text-slate-400">Final Score</p>
-                            <p className="text-4xl font-bold text-white">{totalScore}</p>
-                            <p className="text-slate-400 mt-2">High Score: {highScore}</p>
+                        
+                        <div className="bg-slate-100 p-4 rounded-xl mb-8">
+                             <p className="text-sm text-slate-500 uppercase">Final Score</p>
+                             <p className="text-4xl font-bold text-cyan-600">{centralScore + peripheralScore}</p>
                         </div>
-                        <button onClick={startGame} className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-lg transition flex items-center justify-center">
-                           <RetryIcon /> Try Again
-                        </button>
+                        
+                        <div className="flex gap-4">
+                             <button onClick={handleHomeClick} className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 rounded-lg flex items-center justify-center gap-2">
+                                 <HomeIcon className="w-5 h-5"/> Menu
+                             </button>
+                             <button onClick={retryLevel} className="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2">
+                                 <RetryIcon className="w-5 h-5"/> Retry
+                             </button>
+                        </div>
                     </div>
                 </div>
             )}
-            
-            <ConfirmationModal
-              isOpen={showExitConfirm}
-              title="Confirm Exit"
-              message="Are you sure you want to exit?"
-              onConfirm={handleConfirmExit}
-              onCancel={handleCancelExit}
-              confirmText="Exit"
-            />
 
+            <ConfirmationModal
+                isOpen={showExitConfirm}
+                title="Exit Level?"
+                message="Progress for this session will be lost."
+                onConfirm={handleConfirmExit}
+                onCancel={handleCancelExit}
+                confirmText="Exit"
+            />
         </div>
     );
 };
