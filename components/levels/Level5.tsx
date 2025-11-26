@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Page } from '../../types';
 import GaborCircle from '../GaborCircle';
-import { HomeIcon, HeartIcon, HeartOutlineIcon, XCircleIcon } from '../ui/Icons';
+import { HomeIcon, HeartIcon, HeartOutlineIcon, XCircleIcon, CheckCircleIcon, NextIcon, PlayIcon } from '../ui/Icons';
 import { RetryIcon } from '../ui/Icons';
 import ConfirmationModal from '../ConfirmationModal';
 
@@ -37,6 +37,20 @@ const getEcgPattern = (midY: number, baseAmplitude: number) => {
     oneBeat(randomAmplitude);
   }
   return p;
+};
+
+const checkOverlap = (newPatch: {x: number, y: number}, existingPatches: {x: number, y: number}[]) => {
+    // Patches are positioned by center % (x, y).
+    // Assume a safety threshold distance in %. 
+    // 150px on a typical screen is roughly 15-20%. We use 22% to be safe and avoid overlap.
+    const THRESHOLD = 22; 
+    for (const p of existingPatches) {
+        const dx = p.x - newPatch.x;
+        const dy = p.y - newPatch.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < THRESHOLD) return true;
+    }
+    return false;
 };
 
 // --- Helper Components ---
@@ -138,26 +152,24 @@ const ClickExplosion: React.FC<{ x: number; y: number; onComplete: () => void }>
             className="fixed pointer-events-none z-50" 
             style={{ left: x, top: y, transform: 'translate(-50%, -50%)' }}
         >
-             {/* Central Burst */}
-             <div className="absolute inset-0 rounded-full animate-ping bg-yellow-400 w-8 h-8 opacity-75"></div>
-             
-             {/* Particles */}
-             {Array.from({ length: 12 }).map((_, i) => (
+             {/* Particles - Updated to Brand Colors (Cyan/Teal) */}
+             {Array.from({ length: 16 }).map((_, i) => (
                  <div
                     key={i}
-                    className="absolute w-2 h-2 rounded-full bg-cyan-400"
+                    className={`absolute w-2 h-2 rounded-full ${i % 2 === 0 ? 'bg-cyan-500' : 'bg-teal-400'}`}
                     style={{
-                        transform: `rotate(${i * 30}deg) translate(0, 0)`,
-                        animation: `particle-burst-${i} 0.6s ease-out forwards`
+                        transform: `rotate(${i * 22.5}deg) translate(0, 0)`,
+                        animation: `particle-burst-${i} 0.6s ease-out forwards`,
+                        boxShadow: `0 0 6px ${i % 2 === 0 ? '#06b6d4' : '#2dd4bf'}`
                     }}
                  />
              ))}
              
              <style>{`
-                ${Array.from({ length: 12 }).map((_, i) => `
+                ${Array.from({ length: 16 }).map((_, i) => `
                     @keyframes particle-burst-${i} {
-                        0% { transform: rotate(${i * 30}deg) translate(0, 0) scale(1); opacity: 1; }
-                        100% { transform: rotate(${i * 30}deg) translate(${40 + Math.random() * 40}px, 0) scale(0); opacity: 0; }
+                        0% { transform: rotate(${i * 22.5}deg) translate(0, 0) scale(1.5); opacity: 1; }
+                        100% { transform: rotate(${i * 22.5}deg) translate(${50 + Math.random() * 50}px, 0) scale(0); opacity: 0; }
                     }
                 `).join('')}
              `}</style>
@@ -201,6 +213,7 @@ interface CentralPatch {
     size: number;
     x: number; // Percent 0-100
     y: number; // Percent 0-100
+    contrast?: number;
 }
 
 interface Explosion {
@@ -210,7 +223,8 @@ interface Explosion {
 }
 
 const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
-    const [gameState, setGameState] = useState<'playing' | 'input' | 'gameOver' | 'pausedManually'>('playing');
+    // 'feedback' state added to show Correct/Incorrect result
+    const [gameState, setGameState] = useState<'playing' | 'input' | 'feedback' | 'gameOver' | 'pausedManually'>('playing');
     const [showExitConfirm, setShowExitConfirm] = useState(false);
     
     // Scores
@@ -226,6 +240,7 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
     const [roundTimeLeft, setRoundTimeLeft] = useState(0);
     const [isRoundActive, setIsRoundActive] = useState(false);
     const [centralPatches, setCentralPatches] = useState<CentralPatch[]>([]);
+    const [feedbackData, setFeedbackData] = useState<{isCorrect: boolean, count: number} | null>(null);
     
     // Peripheral Logic
     const [peripheralPatches, setPeripheralPatches] = useState<PeripheralPatch[]>([]);
@@ -237,16 +252,22 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
     const centralSpawnTimerRef = useRef<number | null>(null);
     const peripheralSpawnTimerRef = useRef<number | null>(null);
     const targetCounterRef = useRef(0);
+    const centralPatchesRef = useRef<CentralPatch[]>([]); // To track current patches for overlap in async calls
+
+    useEffect(() => {
+        centralPatchesRef.current = centralPatches;
+    }, [centralPatches]);
 
     // Start a new counting round
     const startCentralRound = useCallback(() => {
-        const duration = Math.floor(Math.random() * 30) + 20; 
+        const duration = Math.floor(Math.random() * 30) + 20; // 20-50 seconds (less than 60)
         setRoundTimeLeft(duration);
         targetCounterRef.current = 0;
         setCentralPatches([]);
         setIsRoundActive(true);
         setCentralInputValue('');
         setGameState('playing');
+        setFeedbackData(null);
 
         if (roundTimerRef.current) clearInterval(roundTimerRef.current);
         roundTimerRef.current = window.setInterval(() => {
@@ -263,37 +284,59 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
         }, 1000);
 
         if (centralSpawnTimerRef.current) clearInterval(centralSpawnTimerRef.current);
-        const spawnLoop = () => {
-            const nextSpawnTime = Math.random() * 2000 + 500; 
-            centralSpawnTimerRef.current = window.setTimeout(() => {
-                if (gameState !== 'playing' && gameState !== 'input') return; 
+        
+        // Continuous Random Spawning
+        centralSpawnTimerRef.current = window.setInterval(() => {
+            // Chance to spawn a patch every tick
+            if (Math.random() > 0.4) {
+                // Base size: 2cm radius ~ 4cm diameter ~ 150px
+                const baseSize = 150; 
                 
-                const isTarget = Math.random() > 0.6;
-                const size = Math.random() * 80 + 80;
-                const id = `c-${Date.now()}`;
-                
-                const newPatch: CentralPatch = {
-                    id,
-                    type: isTarget ? 'gabor' : 'fake',
-                    size,
-                    x: Math.random() * 80 + 10,
-                    y: Math.random() * 80 + 10
-                };
+                let attempts = 0;
+                let x = 50, y = 50;
+                let validPos = false;
 
-                if (isTarget) targetCounterRef.current += 1;
+                // Try to find a non-overlapping position
+                while(attempts < 15) {
+                    x = Math.random() * 80 + 10;
+                    y = Math.random() * 80 + 10;
+                    if (!checkOverlap({x, y}, centralPatchesRef.current)) {
+                        validPos = true;
+                        break;
+                    }
+                    attempts++;
+                }
 
-                setCentralPatches(prev => [...prev, newPatch]);
+                if (validPos) {
+                    // Decide type: 40% Target, 60% Fake
+                    const isTarget = Math.random() < 0.4;
+                    const id = `c-${isTarget ? 'target' : 'fake'}-${Date.now()}-${Math.random()}`;
+                    
+                    const newPatch: CentralPatch = {
+                        id,
+                        type: isTarget ? 'gabor' : 'fake',
+                        size: baseSize,
+                        x,
+                        y,
+                        contrast: isTarget ? (0.5 + Math.random() * 0.5) : 1
+                    };
 
-                setTimeout(() => {
-                    setCentralPatches(prev => prev.filter(p => p.id !== id));
-                }, 1000);
+                    if (isTarget) {
+                        targetCounterRef.current += 1;
+                    }
 
-                if (roundTimeLeft > 1) spawnLoop();
-            }, nextSpawnTime);
-        };
-        spawnLoop();
+                    setCentralPatches(prev => [...prev, newPatch]);
 
-    }, [gameState]);
+                    // Schedule removal after lifetime (1.5s - 2.5s)
+                    const lifeTime = 1500 + Math.random() * 1000;
+                    setTimeout(() => {
+                        setCentralPatches(prev => prev.filter(p => p.id !== id));
+                    }, lifeTime);
+                }
+            }
+        }, 600); // Check every 600ms
+
+    }, []);
 
     // Peripheral Spawning Logic - Refreshes every 5 seconds
     const spawnPeripheral = useCallback(() => {
@@ -321,7 +364,8 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
              newPatches.push({
                 id: `p-fake-top-${timestamp}-${i}`,
                 type: 'fake',
-                size: Math.random() * 40 + 20, // 20-60px varied sizes
+                // Varied sizes for fake patches: 20px - 70px range
+                size: Math.random() * 50 + 20, 
                 x: Math.random() * 90 + 5,
                 y: Math.random() * 60 + 20,
                 side: 'top'
@@ -334,7 +378,8 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
              newPatches.push({
                 id: `p-fake-bot-${timestamp}-${i}`,
                 type: 'fake',
-                size: Math.random() * 40 + 20,
+                // Varied sizes for fake patches: 20px - 70px range
+                size: Math.random() * 50 + 20,
                 x: Math.random() * 90 + 5,
                 y: Math.random() * 60 + 20,
                 side: 'bottom'
@@ -360,13 +405,13 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
             
         } else {
             if (roundTimerRef.current) clearInterval(roundTimerRef.current);
-            if (centralSpawnTimerRef.current) clearTimeout(centralSpawnTimerRef.current);
+            if (centralSpawnTimerRef.current) clearInterval(centralSpawnTimerRef.current);
             if (peripheralSpawnTimerRef.current) clearInterval(peripheralSpawnTimerRef.current);
         }
 
         return () => {
             if (roundTimerRef.current) clearInterval(roundTimerRef.current);
-            if (centralSpawnTimerRef.current) clearTimeout(centralSpawnTimerRef.current);
+            if (centralSpawnTimerRef.current) clearInterval(centralSpawnTimerRef.current);
             if (peripheralSpawnTimerRef.current) clearInterval(peripheralSpawnTimerRef.current);
         };
     }, [gameState, isRoundActive, startCentralRound, spawnPeripheral]);
@@ -388,6 +433,7 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
 
         } else {
             // Fake Click - Decrease Peripheral Lives
+            // Logic: Consistent life loss.
             setPeripheralLives(prev => {
                 const newLives = prev - 1;
                 if (newLives <= 0) setGameState('gameOver');
@@ -402,21 +448,44 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
         const actual = targetCounterRef.current;
         const diff = Math.abs(count - actual);
         
+        let correct = false;
+        
         if (diff === 0) {
-            setCentralScore(prev => prev + 100);
-        } else if (diff <= 1 && actual > 5) {
-            setCentralScore(prev => prev + 50); 
+            setCentralScore(prev => prev + 1); // 1 point
+            correct = true;
         } else {
-             // Wrong count - Decrease Central Lives
-             setCentralLives(prev => {
-                const newLives = prev - 1;
-                if (newLives <= 0) setGameState('gameOver');
-                return newLives;
-            });
+             // Wrong count - Feedback will allow Resume (Lose Life) or Exit
+             correct = false;
         }
+        
+        setFeedbackData({ isCorrect: correct, count: actual });
         setIsRoundActive(false); 
-        setGameState('playing');
+        setGameState('feedback'); // Go to feedback screen
         setCentralInputValue('');
+    };
+    
+    // Feedback Handlers
+    const handleFeedbackContinue = () => {
+        // Correct Answer -> Next Round
+        setGameState('playing');
+    };
+
+    const handleFeedbackResume = () => {
+        // Incorrect Answer -> Resume means start new round but lose a life
+        setCentralLives(prev => {
+            const newLives = prev - 1;
+            if (newLives <= 0) {
+                 setGameState('gameOver');
+                 return newLives;
+            }
+            // If still alive, go to playing
+            setGameState('playing');
+            return newLives;
+        });
+    };
+
+    const handleFeedbackExit = () => {
+        setShowExitConfirm(true);
     };
 
     const handleHomeClick = () => {
@@ -479,39 +548,43 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
                  <div className="flex items-center gap-6">
                      <RingHomeButton onClick={handleHomeClick} />
                      
-                     {/* Score placed to the right of the home button as requested */}
-                     <div className="flex flex-col">
-                           <div className="text-3xl font-bold leading-none drop-shadow-md">
-                               {centralScore + peripheralScore}
-                           </div>
-                           <div className="text-xs font-bold text-cyan-100 uppercase tracking-wide">
+                     {/* Score */}
+                     <div className="bg-white/20 backdrop-blur-md border border-white/30 px-4 py-2 rounded-xl flex flex-col items-center min-w-[90px] shadow-sm">
+                           <div className="text-[10px] font-bold text-cyan-50 uppercase tracking-wider">
                                Score
+                           </div>
+                           <div className="text-2xl font-bold leading-none drop-shadow-sm">
+                               {centralScore + peripheralScore}
                            </div>
                       </div>
                  </div>
 
-                 {/* Lives separated into Central (Blue) and Peripheral (Red) */}
+                 {/* Lives */}
                  <div className="flex gap-6 pr-2">
                      {/* Central Lives (Blue) */}
-                     <div className="flex flex-col items-end">
-                         <div className="flex items-center gap-1 text-blue-300 font-bold text-lg">
+                     <div className="flex flex-col items-center">
+                         <div className="flex items-center gap-1">
                              {Array.from({length:3}).map((_, i) => (
-                                 i < centralLives ? <HeartIcon key={i} className="w-6 h-6 fill-current text-blue-200 drop-shadow-sm"/> : <HeartOutlineIcon key={i} className="w-6 h-6 opacity-40 text-blue-200"/>
+                                 i < centralLives ? 
+                                    <HeartIcon key={i} className="w-7 h-7 fill-current text-blue-600 drop-shadow-md stroke-white stroke-1"/> : 
+                                    <HeartOutlineIcon key={i} className="w-7 h-7 opacity-50 text-blue-100"/>
                              ))}
                          </div>
-                         <div className="text-[10px] font-bold text-cyan-50 uppercase mt-0.5 tracking-wider">
+                         <div className="text-[10px] font-bold text-cyan-50 uppercase mt-1 tracking-wider">
                              Cen. Task
                          </div>
                      </div>
 
                      {/* Peripheral Lives (Red) */}
-                     <div className="flex flex-col items-end">
-                         <div className="flex items-center gap-1 text-rose-300 font-bold text-lg">
+                     <div className="flex flex-col items-center">
+                         <div className="flex items-center gap-1">
                              {Array.from({length:3}).map((_, i) => (
-                                 i < peripheralLives ? <HeartIcon key={i} className="w-6 h-6 fill-current text-rose-200 drop-shadow-sm"/> : <HeartOutlineIcon key={i} className="w-6 h-6 opacity-40 text-rose-200"/>
+                                 i < peripheralLives ? 
+                                    <HeartIcon key={i} className="w-7 h-7 fill-current text-red-600 drop-shadow-md stroke-white stroke-1"/> : 
+                                    <HeartOutlineIcon key={i} className="w-7 h-7 opacity-50 text-red-100"/>
                              ))}
                          </div>
-                         <div className="text-[10px] font-bold text-cyan-50 uppercase mt-0.5 tracking-wider">
+                         <div className="text-[10px] font-bold text-cyan-50 uppercase mt-1 tracking-wider">
                              Peri. Task
                          </div>
                      </div>
@@ -526,15 +599,12 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
 
                  {/* Middle Central Area (White + Patches) */}
                  <div className="flex-1 relative bg-white flex items-center justify-center overflow-hidden border-y-4 border-slate-200">
-                     {/* Timer Bar */}
-                     {gameState === 'playing' && (
-                         <div className="absolute top-0 left-0 h-1 bg-cyan-500 transition-all duration-1000 ease-linear" style={{ width: `${(roundTimeLeft/60)*100}%` }}></div>
-                     )}
+                     {/* REMOVED BLUE TIMER BAR HERE */}
 
                      {centralPatches.map(patch => (
                          <div
                              key={patch.id}
-                             className="absolute rounded-full"
+                             className="absolute rounded-full animate-pop-in"
                              style={{
                                  left: `${patch.x}%`,
                                  top: `${patch.y}%`,
@@ -547,7 +617,7 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
                              {patch.type === 'gabor' ? (
                                  <GaborCircle 
                                      size={patch.size}
-                                     contrast={1.0} 
+                                     contrast={patch.contrast || 1.0} 
                                      onClick={()=>{}}
                                      className="pointer-events-none shadow-xl"
                                  />
@@ -557,8 +627,19 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
                          </div>
                      ))}
                      
+                     {/* VISUAL LEGEND for Central Task - Updated to remove Text */}
                      {gameState === 'playing' && centralPatches.length === 0 && roundTimeLeft > 0 && (
-                         <div className="text-slate-300 text-xl font-bold opacity-20 select-none">Count the Gabor Patches...</div>
+                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-50 select-none">
+                            <div className="flex gap-12 p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                                <div className="flex flex-col items-center gap-3">
+                                    <GaborCircle size={80} contrast={1.0} onClick={()=>{}} className="shadow-md pointer-events-none" />
+                                </div>
+                                <div className="w-px bg-slate-200"></div>
+                                <div className="flex flex-col items-center gap-3">
+                                     <div className="w-[80px] h-[80px] rounded-full bg-slate-300 shadow-inner" />
+                                </div>
+                            </div>
+                         </div>
                      )}
                  </div>
 
@@ -579,27 +660,59 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
 
             {/* --- Overlays --- */}
 
-            {/* Input Overlay */}
+            {/* Input Overlay (Transparent) */}
             {gameState === 'input' && (
-                <div className="absolute inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center">
-                    <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center animate-fade-in-up">
-                         <h2 className="text-2xl font-bold text-slate-700 mb-4">Round Complete!</h2>
-                         <p className="text-lg text-slate-500 mb-6">How many <span className="font-bold text-slate-800">Gabor Patches</span> appeared in the center?</p>
+                <div className="absolute inset-0 z-40 bg-slate-900/60 backdrop-blur-md flex items-center justify-center">
+                    <div className="bg-white/20 backdrop-blur-md border border-white/20 p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center animate-fade-in-up">
+                         <h2 className="text-2xl font-bold text-white mb-4 drop-shadow-md">Time's Up!</h2>
+                         <p className="text-lg text-white/90 mb-6">How many <span className="font-bold text-white">Gabor Patches</span>?</p>
                          <form onSubmit={handleCentralSubmit}>
                              <input 
                                  type="number" 
                                  autoFocus
                                  value={centralInputValue}
                                  onChange={e => setCentralInputValue(e.target.value)}
-                                 className="w-full text-center text-4xl p-4 border-2 border-slate-300 rounded-xl focus:border-cyan-500 outline-none mb-6 font-bold text-slate-700"
+                                 className="w-full text-center text-4xl p-4 bg-white/10 border-2 border-white/30 rounded-xl focus:border-cyan-400 outline-none mb-6 font-bold text-white placeholder-white/30"
                                  placeholder="#"
                              />
-                             <button type="submit" className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-4 rounded-xl transition text-xl shadow-lg shadow-cyan-500/30">
-                                 Submit Count
+                             <button type="submit" className="w-full bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-400 hover:to-teal-400 text-white font-bold py-4 rounded-xl transition text-xl shadow-lg">
+                                 Submit
                              </button>
                          </form>
                     </div>
                 </div>
+            )}
+
+            {/* Feedback Overlay (Correct/Incorrect) */}
+            {gameState === 'feedback' && feedbackData && (
+                 <div className="absolute inset-0 z-40 bg-slate-900/60 backdrop-blur-md flex items-center justify-center">
+                    <div className="bg-white/20 backdrop-blur-md border border-white/20 p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center animate-fade-in-up">
+                        {feedbackData.isCorrect ? (
+                            <>
+                                <CheckCircleIcon className="w-20 h-20 text-teal-400 mx-auto mb-4 drop-shadow-md" />
+                                <h2 className="text-3xl font-bold text-white mb-2 drop-shadow-md">Correct!</h2>
+                                <p className="text-white/80 mb-8">Count was {feedbackData.count}</p>
+                                <button onClick={handleFeedbackContinue} className="w-full bg-teal-500 hover:bg-teal-400 text-white font-bold py-3 px-6 rounded-xl transition flex items-center justify-center gap-2 shadow-lg">
+                                    Continue <NextIcon className="w-5 h-5"/>
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <XCircleIcon className="w-20 h-20 text-rose-500 mx-auto mb-4 drop-shadow-md" />
+                                <h2 className="text-3xl font-bold text-white mb-2 drop-shadow-md">Incorrect</h2>
+                                <p className="text-white/80 mb-8">Correct count was {feedbackData.count}</p>
+                                <div className="flex gap-4">
+                                     <button onClick={handleFeedbackResume} className="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 px-4 rounded-xl transition shadow-lg">
+                                         Resume
+                                     </button>
+                                     <button onClick={handleFeedbackExit} className="flex-1 bg-white/20 hover:bg-white/30 text-white font-bold py-3 px-4 rounded-xl transition shadow-lg">
+                                         Exit
+                                     </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                 </div>
             )}
 
             {/* Game Over Overlay */}
@@ -631,8 +744,8 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
 
             <ConfirmationModal
                 isOpen={showExitConfirm}
-                title="Exit Level?"
-                message="Progress for this session will be lost."
+                title="Confirm Exit"
+                message="Do you want to exit to the Main Menu?"
                 onConfirm={handleConfirmExit}
                 onCancel={handleCancelExit}
                 confirmText="Exit"

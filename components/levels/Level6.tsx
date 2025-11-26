@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Page } from '../../types';
 import { RetryIcon, HomeIcon, NextIcon, StarIcon } from '../ui/Icons';
 import ConfirmationModal from '../ConfirmationModal';
-import GaborCircle from '../GaborCircle';
 
 // --- Constants ---
 const MIN_SPEED = 60;      
@@ -88,6 +87,7 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
     
     const [direction, setDirection] = useState<'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | null>(null);
     const directionRef = useRef<'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | null>(null);
+    const intervalRef = useRef<any>(null);
 
     // Animation Refs
     const prevSnakeRef = useRef<{x: number, y: number}[]>([{ x: 5, y: 5 }]);
@@ -99,7 +99,20 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
     const [highScore, setHighScore] = useState(0);
     const [isPaused, setIsPaused] = useState(false);
 
+    // Refs for regeneration logic
+    const targetRef = useRef<Target>(target);
+    const scoreRef = useRef<number>(score);
+
     useEffect(() => { directionRef.current = direction; }, [direction]);
+    useEffect(() => { targetRef.current = target; }, [target]);
+    useEffect(() => { scoreRef.current = score; }, [score]);
+    
+    // Reset game state when level changes
+    useEffect(() => {
+        setGameState('start');
+        setDirection(null);
+        directionRef.current = null;
+    }, [subLevel]);
 
     // Calculate start speed based on level using useMemo to ensure it updates when level changes
     const startSpeed = useMemo(() => {
@@ -162,6 +175,60 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         }
         return { target: newTarget, distractors: newDistractors };
     }, [subLevel]);
+
+    // Dynamic Distractor Regeneration (Fake patches randomly appear/move)
+    useEffect(() => {
+        if (gameState !== 'playing' || isPaused) return;
+
+        const regenInterval = setInterval(() => {
+            // Use refs to avoid closure staleness and resetting the timer on every move
+            const currentSnake = prevSnakeRef.current;
+            const currentTarget = targetRef.current;
+            const currentScore = scoreRef.current;
+            const cols = gridCols;
+            const rows = gridRows;
+
+            const occupied = new Set<string>();
+            currentSnake.forEach(s => occupied.add(`${s.x},${s.y}`));
+            occupied.add(`${currentTarget.x},${currentTarget.y}`);
+
+            const getRandomPos = () => {
+                let x, y, key;
+                let attempts = 0;
+                do {
+                    x = Math.floor(Math.random() * cols);
+                    y = Math.floor(Math.random() * rows);
+                    key = `${x},${y}`;
+                    attempts++;
+                } while (occupied.has(key) && attempts < 100);
+                return { x, y };
+            };
+
+            let numDistractors = 0;
+            if (subLevel === 1) numDistractors = 1;
+            else if (subLevel === 2) numDistractors = 2;
+            else if (subLevel === 3) numDistractors = 3;
+            else numDistractors = 3 + Math.floor((subLevel - 3) / 5);
+            if (currentScore > 50) numDistractors += 1;
+
+            const newDistractors: Distractor[] = [];
+            for (let i = 0; i < numDistractors; i++) {
+                const pos = getRandomPos();
+                newDistractors.push({
+                    x: pos.x,
+                    y: pos.y,
+                    shape: Math.random() > 0.5 ? 'circle' : 'square',
+                    color: '#374151', 
+                    id: `d-regen-${Date.now()}-${i}`
+                });
+            }
+            setDistractors(newDistractors);
+
+        }, 4000); // Regenerate every 4 seconds
+
+        return () => clearInterval(regenInterval);
+    }, [gameState, isPaused, gridCols, gridRows, subLevel]);
+
 
     const initGrid = useCallback(() => {
         if (gameContainerRef.current) {
@@ -256,6 +323,17 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         });
     }, [gridCols, gridRows, target, distractors, score, highScore, saveMainProgress, generateLevelItems, targetScore]);
 
+    // Function to start/reset the game loop
+    const resetGameLoop = useCallback(() => {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        intervalRef.current = setInterval(() => {
+            if (directionRef.current) {
+                moveSnake();
+            } else {
+                lastMoveTimeRef.current = Date.now();
+            }
+        }, speedRef.current);
+    }, [moveSnake]);
 
     // Input Handling
     useEffect(() => {
@@ -285,12 +363,14 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                 if (newDir !== current) {
                     directionRef.current = newDir;
                     setDirection(newDir);
+                    moveSnake(); // Immediate Move
+                    resetGameLoop(); // Reset Timer
                 }
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [gameState, isPaused, isExitModalOpen]); 
+    }, [gameState, isPaused, isExitModalOpen, moveSnake, resetGameLoop]); 
 
     const handleInput = useCallback((clientX: number, clientY: number) => {
         if (gameState !== 'playing' || isPaused || isExitModalOpen) return;
@@ -325,9 +405,11 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
             if (newDirection && newDirection !== current) {
                 directionRef.current = newDirection;
                 setDirection(newDirection);
+                moveSnake(); // Immediate Move
+                resetGameLoop(); // Reset Timer
             }
         }
-    }, [gameState, isPaused, isExitModalOpen]);
+    }, [gameState, isPaused, isExitModalOpen, moveSnake, resetGameLoop]);
 
     const onPointerDown = (e: React.PointerEvent) => {
         const target = e.target as HTMLElement;
@@ -336,31 +418,17 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         handleInput(e.clientX, e.clientY);
     };
 
-    // IMMEDIATE START EFFECT
-    // If direction changes from null to something, trigger move immediately to avoid delay
-    const hasStartedRef = useRef(false);
+    // Game Loop (Interval) Management
     useEffect(() => {
-        if (gameState === 'playing' && direction !== null && !hasStartedRef.current) {
-            hasStartedRef.current = true;
-            moveSnake(); // Immediate first move
+        if (gameState === 'playing' && !isPaused && !isExitModalOpen) {
+            resetGameLoop();
+        } else {
+            if (intervalRef.current) clearInterval(intervalRef.current);
         }
-        if (direction === null) hasStartedRef.current = false;
-    }, [direction, gameState, moveSnake]);
-
-    // Game Loop (Interval)
-    useEffect(() => {
-        if (gameState !== 'playing' || isPaused || isExitModalOpen) return;
-        
-        const gameInterval = setInterval(() => {
-            if (directionRef.current) {
-                moveSnake();
-            } else {
-                lastMoveTimeRef.current = Date.now();
-            }
-        }, currentSpeed);
-
-        return () => clearInterval(gameInterval);
-    }, [gameState, currentSpeed, isPaused, isExitModalOpen, moveSnake]);
+        return () => {
+            if (intervalRef.current) clearInterval(intervalRef.current);
+        };
+    }, [gameState, isPaused, isExitModalOpen, resetGameLoop]);
 
     // Animation Loop (Rendering)
     useEffect(() => {
@@ -378,6 +446,9 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         const draw = () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
+            // Only draw snake if playing (hide on game over / start / level complete)
+            if (gameState !== 'playing') return;
+
             // Calculate interpolation factor (t)
             const now = Date.now();
             const elapsed = now - lastMoveTimeRef.current;
@@ -497,7 +568,28 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                  let angle = 0;
                  if (visualPoints.length > 1) {
                      const pNext = visualPoints[1];
-                     angle = Math.atan2(pHead.y - pNext.y, pHead.x - pNext.x) + Math.PI/2; 
+                     const dx = pHead.x - pNext.x;
+                     const dy = pHead.y - pNext.y;
+                     
+                     // If points are distinct enough, use vector angle
+                     if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
+                        angle = Math.atan2(dy, dx) + Math.PI/2; 
+                     } else if (directionRef.current) {
+                        // Fallback for length-1 snake where head and tail interpolate together
+                        switch(directionRef.current) {
+                            case 'UP': angle = 0; break;
+                            case 'RIGHT': angle = Math.PI/2; break;
+                            case 'DOWN': angle = Math.PI; break;
+                            case 'LEFT': angle = -Math.PI/2; break;
+                        }
+                     }
+                 } else if (directionRef.current) {
+                     switch(directionRef.current) {
+                        case 'UP': angle = 0; break;
+                        case 'RIGHT': angle = Math.PI/2; break;
+                        case 'DOWN': angle = Math.PI; break;
+                        case 'LEFT': angle = -Math.PI/2; break;
+                    }
                  }
 
                  // Draw Head Glow
@@ -546,7 +638,7 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         draw();
         return () => cancelAnimationFrame(animationFrameId);
 
-    }, [snake, gridCols, gridRows, cellSize]); 
+    }, [snake, gridCols, gridRows, cellSize, gameState]); 
 
     useEffect(() => {
         const handleResize = () => initGrid();
@@ -562,6 +654,13 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         backgroundSize: '100% 100%',
         boxShadow: '0 0 8px rgba(0, 0, 0, 0.5)'
     };
+    
+    // Food Gabor pattern (High contrast) - Used for both Game and Legend
+    const foodGaborStyle = {
+        backgroundImage: `repeating-linear-gradient(45deg, #ffffff, #ffffff 2px, #000000 2px, #000000 4px)`,
+        backgroundColor: '#ffffff',
+        backgroundSize: '100% 100%',
+    };
 
     const renderOverlay = () => {
         const commonClasses = "absolute inset-0 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center text-center z-40 p-6 font-sans rounded-md border border-slate-800";
@@ -576,8 +675,16 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                     <div className="flex flex-col gap-4 items-center justify-center mb-10 bg-slate-800/50 p-6 rounded-2xl border border-slate-700 w-full max-w-xs">
                         <div className="flex items-center justify-around w-full">
                             <div className="flex flex-col items-center gap-2">
-                                <GaborCircle size={40} contrast={1} onClick={()=>{}} />
-                                <span className="text-xs font-bold text-cyan-300">FIND</span>
+                                <div 
+                                    style={{
+                                        width: '40px', 
+                                        height: '40px', 
+                                        borderRadius: '50%',
+                                        ...foodGaborStyle,
+                                        boxShadow: '0 0 10px rgba(255,255,255,0.5)'
+                                    }}
+                                ></div>
+                                {/* TEXT REMOVED */}
                             </div>
                             <div className="h-8 w-px bg-slate-600"></div>
                             <div className="flex flex-col items-center gap-2">
@@ -589,7 +696,7 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                                         ...distractorGaborStyle
                                     }}
                                 ></div>
-                                <span className="text-xs font-medium text-rose-400">AVOID</span>
+                                {/* TEXT REMOVED */}
                             </div>
                         </div>
                     </div>
@@ -649,13 +756,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         return null;
     };
 
-    // Food Gabor pattern (High contrast)
-    const foodGaborStyle = {
-        backgroundImage: `repeating-linear-gradient(45deg, #ffffff, #ffffff 2px, #000000 2px, #000000 4px)`,
-        backgroundColor: '#ffffff',
-        backgroundSize: '100% 100%',
-    };
-
     return (
         <div className="flex flex-col h-screen w-full bg-black font-sans select-none overflow-hidden">
              <header className="w-full p-3 sm:p-4 bg-slate-900 shadow-sm z-10 shrink-0 border-b border-slate-800 flex justify-between items-center">
@@ -684,37 +784,42 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                             </div>
                         )}
 
-                        <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none z-20" />
+                        {/* Only render snake canvas and game items if IN 'playing' state to prevent clutter on other screens */}
+                        {gameState === 'playing' && (
+                            <>
+                                <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none z-20" />
 
-                        <div 
-                            className="absolute flex items-center justify-center transition-all duration-300 animate-pulse" 
-                            style={{ 
-                                width: `${cellSize}px`, 
-                                height: `${cellSize}px`, 
-                                top: `${target.y * cellSize}px`, 
-                                left: `${target.x * cellSize}px`, 
-                                zIndex: 100, 
-                                borderRadius: target.shape === 'circle' ? '50%' : '0%',
-                                ...foodGaborStyle,
-                                boxShadow: '0 0 15px rgba(255,255,255,0.6)'
-                            }} 
-                        />
-                        
-                        {distractors.map(d => (
-                             <div 
-                                key={d.id} 
-                                className="absolute flex items-center justify-center transition-opacity duration-300" 
-                                style={{ 
-                                    width: `${cellSize}px`, 
-                                    height: `${cellSize}px`, 
-                                    top: `${d.y * cellSize}px`, 
-                                    left: `${d.x * cellSize}px`, 
-                                    zIndex: 5,
-                                    borderRadius: d.shape === 'circle' ? '50%' : '0%',
-                                    ...distractorGaborStyle
-                                }} 
-                             />
-                        ))}
+                                <div 
+                                    className="absolute flex items-center justify-center transition-all duration-300 animate-pulse" 
+                                    style={{ 
+                                        width: `${cellSize}px`, 
+                                        height: `${cellSize}px`, 
+                                        top: `${target.y * cellSize}px`, 
+                                        left: `${target.x * cellSize}px`, 
+                                        zIndex: 100, 
+                                        borderRadius: target.shape === 'circle' ? '50%' : '0%',
+                                        ...foodGaborStyle,
+                                        boxShadow: '0 0 15px rgba(255,255,255,0.6)'
+                                    }} 
+                                />
+                                
+                                {distractors.map(d => (
+                                     <div 
+                                        key={d.id} 
+                                        className="absolute flex items-center justify-center transition-opacity duration-300" 
+                                        style={{ 
+                                            width: `${cellSize}px`, 
+                                            height: `${cellSize}px`, 
+                                            top: `${d.y * cellSize}px`, 
+                                            left: `${d.x * cellSize}px`, 
+                                            zIndex: 5,
+                                            borderRadius: d.shape === 'circle' ? '50%' : '0%',
+                                            ...distractorGaborStyle
+                                        }} 
+                                     />
+                                ))}
+                            </>
+                        )}
                     </div>
                 </div>
                 <div className="absolute bottom-2 left-4 z-20 pointer-events-none">
@@ -723,7 +828,14 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                     </div>
                 </div>
             </main>
-            <ConfirmationModal isOpen={isExitModalOpen} title="Confirm Exit" message="Return to level selection?" onConfirm={() => { setIsExitModalOpen(false); onExit(); }} onCancel={() => { setIsExitModalOpen(false); setIsPaused(false); }} confirmText="Exit" />
+            <ConfirmationModal 
+                isOpen={isExitModalOpen} 
+                title="Confirm Exit" 
+                message="Do you want to exit to the Main Menu?" 
+                onConfirm={() => { setIsExitModalOpen(false); onExit(); }} 
+                onCancel={() => { setIsExitModalOpen(false); setIsPaused(false); }} 
+                confirmText="Exit" 
+            />
         </div>
     );
 };
@@ -734,34 +846,36 @@ interface Level6Props {
 }
 
 const Level6: React.FC<Level6Props> = ({ setCurrentPage, saveLevelCompletion }) => {
-    const [currentSubLevel, setCurrentSubLevel] = useState(1);
-    
-    const handleLevelComplete = (score: number) => {
-        if(currentSubLevel >= TOTAL_SUB_LEVELS) {
-            saveLevelCompletion('level6', 3);
-            setCurrentPage('home'); 
+    const [subLevel, setSubLevel] = useState(1);
+
+    const handleSubLevelComplete = (score: number) => {
+        if (subLevel < TOTAL_SUB_LEVELS) {
+            setSubLevel(prev => prev + 1);
         } else {
-             setCurrentSubLevel(prev => prev + 1);
+            // Level 6 Complete (All 100 levels)
+            saveLevelCompletion('level6', 3);
+            setCurrentPage('home');
         }
     };
-    
+
     const handleExit = () => {
         setCurrentPage('home');
     };
 
-    const saveProgress = (stars: number) => {
-         saveLevelCompletion('level6', stars);
+    // Placeholder mapping for acuity label based on subLevel
+    const getAcuityLabel = (level: number) => {
+        // Simple mapping example: Level 1 = 20/200, Level 100 = 20/20
+        // This is just a visual label
+        return `Level ${level}`;
     };
-
-    const acuity = `20/${Math.round(200 - (currentSubLevel * 1.8))}`; 
 
     return (
         <SnakeGame 
-            subLevel={currentSubLevel} 
-            acuityLabel={acuity}
+            subLevel={subLevel} 
+            acuityLabel={getAcuityLabel(subLevel)} 
             onExit={handleExit} 
-            onComplete={handleLevelComplete}
-            saveMainProgress={saveProgress}
+            onComplete={handleSubLevelComplete}
+            saveMainProgress={(stars) => saveLevelCompletion('level6', stars)}
         />
     );
 };
