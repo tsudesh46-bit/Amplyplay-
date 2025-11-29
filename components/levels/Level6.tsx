@@ -5,14 +5,24 @@ import { RetryIcon, HomeIcon, NextIcon, StarIcon } from '../ui/Icons';
 import ConfirmationModal from '../ConfirmationModal';
 
 // --- Constants ---
-const MIN_SPEED = 60;      
-const SPEED_DECREMENT = 2; // Speed increase per point scored within a level
+// Slowed down speed for better accessibility
+const MIN_SPEED = 500; 
+const SPEED_DECREMENT = 2; 
 
 const TOTAL_SUB_LEVELS = 100;
 const BORDER_THICKNESS = 4;
 
-// Approximation: 96DPI -> 1cm is ~38px. 2cm is ~76px.
-const BASE_CELL_SIZE_PX = 76; 
+// Approximation: 96DPI -> 1cm is ~38px. 2cm radius = 4cm diameter ~ 152px.
+const BASE_CELL_SIZE_PX = 150; 
+
+const ACUITY_MILESTONES = [
+    { label: '6/60', limit: 16 },
+    { label: '6/36', limit: 32 },
+    { label: '6/24', limit: 48 },
+    { label: '6/18', limit: 64 },
+    { label: '6/12', limit: 80 },
+    { label: '6/9', limit: 100 }
+];
 
 // --- Helper Components ---
 
@@ -54,17 +64,10 @@ interface SnakeGameProps {
 }
 
 const getTargetScore = (level: number) => {
-    if (level <= 20) return 100;
-    if (level <= 50) return 200;
-    if (level <= 70) return 500;
-    if (level <= 90) return 700;
     return 100; 
 };
 
-// Calculate cell size. Level 1 starts at ~2cm (76px). 
-// As levels progress, size decreases slightly to increase difficulty, but stays large for low vision.
 const getCellSizeForLevel = (level: number) => {
-    // Range: Starts at 76px, drops to about 40px at level 100.
     return Math.floor(Math.max(40, BASE_CELL_SIZE_PX - ((level - 1) * 0.36)));
 };
 
@@ -87,6 +90,7 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
     
     const [direction, setDirection] = useState<'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | null>(null);
     const directionRef = useRef<'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | null>(null);
+    const nextDirectionRef = useRef<'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | null>(null); // Buffer for next input
     const intervalRef = useRef<any>(null);
 
     // Animation Refs
@@ -112,16 +116,11 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         setGameState('start');
         setDirection(null);
         directionRef.current = null;
+        nextDirectionRef.current = null;
     }, [subLevel]);
 
-    // Calculate start speed based on level using useMemo to ensure it updates when level changes
     const startSpeed = useMemo(() => {
-        if (subLevel <= 5) {
-            // Level 1 starts at 800ms (Very Slow)
-            return 800 - ((subLevel - 1) * 50);
-        } else {
-            return Math.max(150, 550 - ((subLevel - 6) * 10));
-        }
+        return 1500 - ((subLevel - 1) * 4); // Slower base speed (1.5s per tile at start)
     }, [subLevel]);
 
     const currentSpeed = Math.max(MIN_SPEED, startSpeed - (score * SPEED_DECREMENT));
@@ -141,26 +140,20 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                 y = Math.floor(Math.random() * rows);
                 key = `${x},${y}`;
                 attempts++;
-            } while (occupied.has(key) && attempts < 100);
+            } while (occupied.has(key) && attempts < 200);
+            
             occupied.add(key);
             return { x, y };
         };
 
         const newTargetPos = getRandomPos();
-        // Randomly assign shape: Gabor Circle or Gabor Square
         const newTarget: Target = {
             ...newTargetPos,
             shape: Math.random() > 0.5 ? 'circle' : 'square'
         };
         
-        // Distractor Logic
-        let numDistractors = 0;
-        if (subLevel === 1) numDistractors = 1;
-        else if (subLevel === 2) numDistractors = 2; // Level 2 gets exactly 2 distractors
-        else if (subLevel === 3) numDistractors = 3;
-        else numDistractors = 3 + Math.floor((subLevel - 3) / 5);
-
-        if (currentScore > 50) numDistractors += 1;
+        // Always exactly 1 distractor to ensure "one fake patch and one correct patch"
+        const numDistractors = 1; 
         
         const newDistractors: Distractor[] = [];
         for (let i = 0; i < numDistractors; i++) {
@@ -176,67 +169,12 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         return { target: newTarget, distractors: newDistractors };
     }, [subLevel]);
 
-    // Dynamic Distractor Regeneration (Fake patches randomly appear/move)
-    useEffect(() => {
-        if (gameState !== 'playing' || isPaused) return;
-
-        const regenInterval = setInterval(() => {
-            // Use refs to avoid closure staleness and resetting the timer on every move
-            const currentSnake = prevSnakeRef.current;
-            const currentTarget = targetRef.current;
-            const currentScore = scoreRef.current;
-            const cols = gridCols;
-            const rows = gridRows;
-
-            const occupied = new Set<string>();
-            currentSnake.forEach(s => occupied.add(`${s.x},${s.y}`));
-            occupied.add(`${currentTarget.x},${currentTarget.y}`);
-
-            const getRandomPos = () => {
-                let x, y, key;
-                let attempts = 0;
-                do {
-                    x = Math.floor(Math.random() * cols);
-                    y = Math.floor(Math.random() * rows);
-                    key = `${x},${y}`;
-                    attempts++;
-                } while (occupied.has(key) && attempts < 100);
-                return { x, y };
-            };
-
-            let numDistractors = 0;
-            if (subLevel === 1) numDistractors = 1;
-            else if (subLevel === 2) numDistractors = 2;
-            else if (subLevel === 3) numDistractors = 3;
-            else numDistractors = 3 + Math.floor((subLevel - 3) / 5);
-            if (currentScore > 50) numDistractors += 1;
-
-            const newDistractors: Distractor[] = [];
-            for (let i = 0; i < numDistractors; i++) {
-                const pos = getRandomPos();
-                newDistractors.push({
-                    x: pos.x,
-                    y: pos.y,
-                    shape: Math.random() > 0.5 ? 'circle' : 'square',
-                    color: '#374151', 
-                    id: `d-regen-${Date.now()}-${i}`
-                });
-            }
-            setDistractors(newDistractors);
-
-        }, 4000); // Regenerate every 4 seconds
-
-        return () => clearInterval(regenInterval);
-    }, [gameState, isPaused, gridCols, gridRows, subLevel]);
-
-
     const initGrid = useCallback(() => {
         if (gameContainerRef.current) {
             const width = gameContainerRef.current.clientWidth - (BORDER_THICKNESS * 2);
             const height = gameContainerRef.current.clientHeight - (BORDER_THICKNESS * 2);
             let cols = Math.floor(width / cellSize);
             let rows = Math.floor(height / cellSize);
-            // Ensure minimum play area
             cols = Math.max(5, cols);
             rows = Math.max(5, rows);
             setGridCols(cols);
@@ -248,7 +186,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
 
     const startGame = useCallback(() => {
         const { cols, rows } = initGrid();
-        // Force Center Start
         const centerX = Math.floor(cols / 2);
         const centerY = Math.floor(rows / 2);
         const startSnake = [{ x: centerX, y: centerY }];
@@ -260,9 +197,9 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         setTarget(items.target);
         setDistractors(items.distractors);
         
-        // Initialize direction to null so snake waits for input
         setDirection(null); 
         directionRef.current = null;
+        nextDirectionRef.current = null;
         
         if (score > highScore) setHighScore(score);
         setScore(0);
@@ -270,13 +207,20 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         setIsPaused(false);
     }, [generateLevelItems, score, highScore, initGrid]);
 
-    // --- Movement Logic Extracted ---
     const moveSnake = useCallback(() => {
+        if (nextDirectionRef.current) {
+            directionRef.current = nextDirectionRef.current;
+            setDirection(nextDirectionRef.current);
+            nextDirectionRef.current = null;
+        }
+        
         const currentDir = directionRef.current;
-        if (!currentDir) return;
+        if (!currentDir) {
+            lastMoveTimeRef.current = Date.now();
+            return;
+        }
         
         setSnake(prevSnake => {
-            // Capture previous state for interpolation
             prevSnakeRef.current = prevSnake;
             lastMoveTimeRef.current = Date.now();
 
@@ -289,7 +233,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                 case 'RIGHT': next.x += 1; break;
             }
             
-            // Collision Check
             if (next.x < 0 || next.x >= gridCols || next.y < 0 || next.y >= gridRows || 
                 prevSnake.some(s => s.x === next.x && s.y === next.y) ||
                 distractors.some(d => d.x === next.x && d.y === next.y)) {
@@ -299,7 +242,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                 return prevSnake;
             }
 
-            // Eating Check
             if (next.x === target.x && next.y === target.y) {
                 isEatingRef.current = true;
                 const newScore = score + 1;
@@ -323,19 +265,29 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         });
     }, [gridCols, gridRows, target, distractors, score, highScore, saveMainProgress, generateLevelItems, targetScore]);
 
-    // Function to start/reset the game loop
+    useEffect(() => {
+        let itemsInvalid = false;
+        
+        if (target.x >= gridCols || target.y >= gridRows) itemsInvalid = true;
+        
+        if (!itemsInvalid && distractors.some(d => d.x >= gridCols || d.y >= gridRows)) {
+            itemsInvalid = true;
+        }
+
+        if (itemsInvalid) {
+            const items = generateLevelItems(snake, gridCols, gridRows, score);
+            setTarget(items.target);
+            setDistractors(items.distractors);
+        }
+    }, [gridCols, gridRows, snake, score, generateLevelItems, target, distractors]);
+
     const resetGameLoop = useCallback(() => {
         if (intervalRef.current) clearInterval(intervalRef.current);
         intervalRef.current = setInterval(() => {
-            if (directionRef.current) {
-                moveSnake();
-            } else {
-                lastMoveTimeRef.current = Date.now();
-            }
+             moveSnake();
         }, speedRef.current);
     }, [moveSnake]);
 
-    // Input Handling
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
@@ -354,18 +306,20 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
 
             if (newDir) {
                 const current = directionRef.current;
-                // Prevent reverse
-                if (current === 'LEFT' && newDir === 'RIGHT') newDir = current;
-                if (current === 'RIGHT' && newDir === 'LEFT') newDir = current;
-                if (current === 'UP' && newDir === 'DOWN') newDir = current;
-                if (current === 'DOWN' && newDir === 'UP') newDir = current;
-
-                if (newDir !== current) {
-                    directionRef.current = newDir;
-                    setDirection(newDir);
-                    moveSnake(); // Immediate Move
-                    resetGameLoop(); // Reset Timer
+                
+                if (!current) {
+                    nextDirectionRef.current = newDir;
+                    moveSnake(); 
+                    resetGameLoop();
+                    return;
                 }
+
+                if (current === 'LEFT' && newDir === 'RIGHT') return;
+                if (current === 'RIGHT' && newDir === 'LEFT') return;
+                if (current === 'UP' && newDir === 'DOWN') return;
+                if (current === 'DOWN' && newDir === 'UP') return;
+
+                nextDirectionRef.current = newDir;
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -394,19 +348,21 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
             }
             
             const current = directionRef.current;
-            // Validate against reverse direction if moving, but ALLOW if current is null (start)
-            if (current) {
-                if (current === 'LEFT' && newDirection === 'RIGHT') newDirection = current;
-                if (current === 'RIGHT' && newDirection === 'LEFT') newDirection = current;
-                if (current === 'UP' && newDirection === 'DOWN') newDirection = current;
-                if (current === 'DOWN' && newDirection === 'UP') newDirection = current;
+             
+             if (!current) {
+                nextDirectionRef.current = newDirection;
+                moveSnake();
+                resetGameLoop();
+                return;
             }
 
-            if (newDirection && newDirection !== current) {
-                directionRef.current = newDirection;
-                setDirection(newDirection);
-                moveSnake(); // Immediate Move
-                resetGameLoop(); // Reset Timer
+            if (current === 'LEFT' && newDirection === 'RIGHT') return;
+            if (current === 'RIGHT' && newDirection === 'LEFT') return;
+            if (current === 'UP' && newDirection === 'DOWN') return;
+            if (current === 'DOWN' && newDirection === 'UP') return;
+
+            if (newDirection) {
+                nextDirectionRef.current = newDirection;
             }
         }
     }, [gameState, isPaused, isExitModalOpen, moveSnake, resetGameLoop]);
@@ -418,7 +374,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         handleInput(e.clientX, e.clientY);
     };
 
-    // Game Loop (Interval) Management
     useEffect(() => {
         if (gameState === 'playing' && !isPaused && !isExitModalOpen) {
             resetGameLoop();
@@ -430,7 +385,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         };
     }, [gameState, isPaused, isExitModalOpen, resetGameLoop]);
 
-    // Animation Loop (Rendering)
     useEffect(() => {
         let animationFrameId: number;
         const canvas = canvasRef.current;
@@ -439,17 +393,14 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
         
-        // Resize Canvas to match grid container
         canvas.width = gridCols * cellSize;
         canvas.height = gridRows * cellSize;
 
         const draw = () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Only draw snake if playing (hide on game over / start / level complete)
             if (gameState !== 'playing') return;
 
-            // Calculate interpolation factor (t)
             const now = Date.now();
             const elapsed = now - lastMoveTimeRef.current;
             const duration = speedRef.current;
@@ -460,10 +411,8 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
             
             if (currentSnake.length === 0) return;
 
-            // --- Construct Visual Path Points ---
             let visualPoints: {x: number, y: number}[] = [];
 
-            // 1. Interpolated Head
             if (prevSnake.length > 0 && currentSnake.length > 0) {
                 const pHead = prevSnake[0];
                 const cHead = currentSnake[0];
@@ -476,12 +425,10 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                  visualPoints.push(currentSnake[0]);
             }
 
-            // 2. Static Body
             for (let i = 1; i < currentSnake.length; i++) {
                 visualPoints.push(currentSnake[i]);
             }
 
-            // 3. Interpolated Tail
             if (!isEatingRef.current && prevSnake.length > 0 && currentSnake.length > 0) {
                  const pTail = prevSnake[prevSnake.length - 1]; 
                  const cTail = currentSnake[currentSnake.length - 1]; 
@@ -491,7 +438,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                  
                  visualPoints.push({ x: vTailX, y: vTailY });
             } else if (currentSnake.length > 0) {
-                 // If eating, tail is stationary at the end
                  visualPoints.push(currentSnake[currentSnake.length-1]);
             }
             
@@ -499,8 +445,7 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                  visualPoints = [visualPoints[0], visualPoints[0]]; 
             }
 
-            // --- Render Snake using Dense Circles (Particle System) ---
-            const snakeWidth = cellSize * 0.85; 
+            const snakeWidth = Math.min(75, cellSize * 0.9);
             const stepSize = 1; 
             
             let currentDistanceTraveled = 0;
@@ -521,7 +466,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                 const dy = p2.y - p1.y;
                 const dist = Math.sqrt(dx*dx + dy*dy);
                 
-                // Convert to pixels
                 const pixelDist = dist * cellSize;
                 const steps = Math.ceil(pixelDist / stepSize);
                 
@@ -532,24 +476,17 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                     const x = p1.x + dx * ratio;
                     const y = p1.y + dy * ratio;
                     
-                    // Calculate distance from head for texture
                     const totalDist = currentDistanceTraveled + (pixelDist * ratio);
                     const normalizedPos = (currentDistanceTraveled + pixelDist * ratio) / (totalLen * cellSize);
 
-                    // --- Gabor Texture Logic ---
                     const stripeFrequency = 0.2; 
                     const gratingValue = Math.sin(totalDist * stripeFrequency);
                     
-                    // --- Variable Contrast Sensitivity Envelope ---
-                    // Varies contrast along the body length
                     const contrastFrequency = 0.02;
                     const rawEnvelope = (Math.sin(totalDist * contrastFrequency) + 1) / 2;
                     const contrast = 0.1 + 0.9 * rawEnvelope;
                     const effectiveContrast = totalDist < cellSize * 2 ? 1.0 : contrast;
 
-                    // --- Final Color Calculation ---
-                    // Base lightness gradient: Head (White) -> Tail (Dark Grey)
-                    // Modulate with Gabor stripes based on effective contrast
                     const baseLightness = Math.max(20, 98 - (normalizedPos * 78));
                     const gaborMod = gratingValue * 25 * effectiveContrast;
                     
@@ -561,7 +498,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                 currentDistanceTraveled += pixelDist;
             }
             
-            // Draw Head (Topmost)
             if(visualPoints.length > 0) {
                  const pHead = visualPoints[0];
                  
@@ -571,11 +507,9 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                      const dx = pHead.x - pNext.x;
                      const dy = pHead.y - pNext.y;
                      
-                     // If points are distinct enough, use vector angle
                      if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
                         angle = Math.atan2(dy, dx) + Math.PI/2; 
                      } else if (directionRef.current) {
-                        // Fallback for length-1 snake where head and tail interpolate together
                         switch(directionRef.current) {
                             case 'UP': angle = 0; break;
                             case 'RIGHT': angle = Math.PI/2; break;
@@ -592,7 +526,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                     }
                  }
 
-                 // Draw Head Glow
                  ctx.beginPath();
                  ctx.arc(pHead.x * cellSize + cellSize/2, pHead.y * cellSize + cellSize/2, snakeWidth/2, 0, Math.PI * 2);
                  ctx.fillStyle = `hsl(0, 0%, 95%)`;
@@ -605,7 +538,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                  ctx.translate(pHead.x * cellSize + cellSize/2, pHead.y * cellSize + cellSize/2);
                  ctx.rotate(angle);
                  
-                 // Draw Stars (Yellow Eyes)
                  ctx.fillStyle = "#fef08a"; 
                  const eyeOffsetX = snakeWidth * 0.25;
                  const eyeOffsetY = -snakeWidth * 0.1;
@@ -647,7 +579,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         return () => window.removeEventListener('resize', handleResize);
     }, [initGrid]);
 
-    // Distractor Gabor pattern (Fake/Low contrast/Different orientation) - Darker Grey
     const distractorGaborStyle = {
         backgroundImage: `repeating-linear-gradient(135deg, #374151, #374151 2px, #111827 2px, #111827 4px)`, 
         backgroundColor: '#374151',
@@ -655,7 +586,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         boxShadow: '0 0 8px rgba(0, 0, 0, 0.5)'
     };
     
-    // Food Gabor pattern (High contrast) - Used for both Game and Legend
     const foodGaborStyle = {
         backgroundImage: `repeating-linear-gradient(45deg, #ffffff, #ffffff 2px, #000000 2px, #000000 4px)`,
         backgroundColor: '#ffffff',
@@ -669,50 +599,72 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
         if (gameState === 'start') {
             return (
                 <div className={commonClasses}>
-                    <h2 className={`text-4xl font-bold ${textClasses} mb-2 tracking-tight`}>LEVEL {subLevel}</h2>
-                    <p className={`text-lg text-cyan-400 font-medium mb-8`}>Target Score: {targetScore}</p>
-                    
-                    <div className="flex flex-col gap-4 items-center justify-center mb-10 bg-slate-800/50 p-6 rounded-2xl border border-slate-700 w-full max-w-xs">
-                        <div className="flex items-center justify-around w-full">
-                            <div className="flex flex-col items-center gap-2">
+                    <div className="flex flex-col items-center justify-center bg-slate-900/40 p-10 rounded-3xl border-4 border-cyan-500 shadow-[0_0_50px_rgba(34,211,238,0.25)] backdrop-blur-md relative animate-bounce-in max-w-lg w-full">
+                        <div className="absolute inset-3 border border-cyan-400/20 rounded-2xl pointer-events-none"></div>
+
+                        <h2 className={`text-5xl font-bold ${textClasses} mb-1 tracking-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]`}>LEVEL 06</h2>
+                        <p className={`text-xl text-cyan-400 font-bold mb-8 tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]`}>TARGET SCORE: {targetScore}</p>
+                        
+                        <div className="flex items-center justify-around w-full mb-10 px-4">
+                            <div className="flex flex-col items-center gap-3">
                                 <div 
                                     style={{
-                                        width: '40px', 
-                                        height: '40px', 
+                                        width: '60px', 
+                                        height: '60px', 
                                         borderRadius: '50%',
                                         ...foodGaborStyle,
-                                        boxShadow: '0 0 10px rgba(255,255,255,0.5)'
+                                        boxShadow: '0 0 20px rgba(255,255,255,0.4)'
                                     }}
                                 ></div>
-                                {/* TEXT REMOVED */}
+                                <span className="text-white font-bold text-lg tracking-widest uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">FIND</span>
                             </div>
-                            <div className="h-8 w-px bg-slate-600"></div>
-                            <div className="flex flex-col items-center gap-2">
+                            
+                            <div className="h-16 w-0.5 bg-gradient-to-b from-transparent via-cyan-500/50 to-transparent"></div>
+                            
+                            <div className="flex flex-col items-center gap-3">
                                 <div 
                                     style={{
-                                        width: '40px', 
-                                        height: '40px', 
+                                        width: '60px', 
+                                        height: '60px', 
                                         borderRadius: '50%',
                                         ...distractorGaborStyle
                                     }}
                                 ></div>
-                                {/* TEXT REMOVED */}
+                                <span className="text-slate-400 font-bold text-lg tracking-widest uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">AVOID</span>
                             </div>
                         </div>
+                        
+                        <button 
+                            onClick={startGame}
+                            className="group relative px-12 py-5 bg-cyan-950/50 border-2 border-cyan-400 rounded-full transition-all duration-300 hover:scale-105 hover:bg-cyan-900/80 hover:shadow-[0_0_30px_rgba(34,211,238,0.4)] z-10"
+                        >
+                            <div className="flex items-center justify-center gap-4">
+                                <StarIcon className="w-8 h-8 text-cyan-400 group-hover:text-cyan-200 animate-spin-slow" />
+                                <span className="text-2xl font-bold text-cyan-400 group-hover:text-cyan-200 tracking-wider">
+                                    START GAME
+                                </span>
+                                 <StarIcon className="w-8 h-8 text-cyan-400 group-hover:text-cyan-200 animate-spin-slow" />
+                            </div>
+                        </button>
                     </div>
-                    
-                    <button 
-                        onClick={startGame}
-                        className="group relative px-10 py-4 bg-transparent border-2 border-cyan-400 rounded-full transition-all duration-300 hover:scale-105 hover:bg-cyan-500/10 hover:shadow-[0_0_20px_rgba(34,211,238,0.5)]"
-                    >
-                        <div className="flex items-center justify-center gap-3">
-                            <StarIcon className="w-6 h-6 text-cyan-400 group-hover:text-cyan-200 animate-spin-slow" />
-                            <span className="text-xl font-bold text-cyan-400 group-hover:text-cyan-200 tracking-wider">
-                                START GAME
-                            </span>
-                             <StarIcon className="w-6 h-6 text-cyan-400 group-hover:text-cyan-200 animate-spin-slow" />
-                        </div>
-                    </button>
+
+                    <style>{`
+                        @keyframes bounce-in {
+                            0% { transform: scale(0.8); opacity: 0; }
+                            70% { transform: scale(1.02); opacity: 1; }
+                            100% { transform: scale(1); opacity: 1; }
+                        }
+                        .animate-bounce-in {
+                            animation: bounce-in 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+                        }
+                        @keyframes spin-slow {
+                            from { transform: rotate(0deg); }
+                            to { transform: rotate(360deg); }
+                        }
+                        .animate-spin-slow {
+                            animation: spin-slow 4s linear infinite;
+                        }
+                    `}</style>
                 </div>
             );
         }
@@ -758,16 +710,26 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
 
     return (
         <div className="flex flex-col h-screen w-full bg-black font-sans select-none overflow-hidden">
-             <header className="w-full p-3 sm:p-4 bg-slate-900 shadow-sm z-10 shrink-0 border-b border-slate-800 flex justify-between items-center">
-                <div className="flex items-center gap-4">
+             <header className="w-full p-2 bg-slate-900 shadow-sm z-10 shrink-0 border-b border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-4 pl-2">
                     <div style={{ transform: 'scale(0.8)' }}>
                         <RingHomeButton onClick={() => { setIsPaused(true); setIsExitModalOpen(true); }} />
                     </div>
-                    <h1 className="text-xl sm:text-2xl font-bold text-slate-200 font-sans tracking-wide">LEVEL {String(subLevel).padStart(2, '0')}</h1>
-                </div>
-                <div className="text-center text-slate-200 font-sans">
-                    <p className="text-xs sm:text-sm font-bold opacity-50 uppercase tracking-wider">TARGET</p>
-                    <p className="text-lg sm:text-xl font-bold text-cyan-400">{score} / {targetScore}</p>
+                    
+                    <div className="flex items-center gap-3 sm:gap-6 overflow-x-auto no-scrollbar pl-2">
+                        {ACUITY_MILESTONES.map((m, idx) => {
+                             const currentIndex = ACUITY_MILESTONES.findIndex(item => subLevel <= item.limit);
+                             const activeIndex = currentIndex === -1 ? ACUITY_MILESTONES.length - 1 : currentIndex;
+                             const isActive = idx === activeIndex;
+                             
+                             return (
+                                 <div key={m.label} className={`flex flex-col items-center transition-all duration-300 ${isActive ? 'opacity-100 scale-110' : 'opacity-30 scale-90'}`}>
+                                     <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-tight">TARGET</span>
+                                     <span className={`text-sm sm:text-lg font-bold font-mono leading-tight ${isActive ? 'text-cyan-400' : 'text-slate-500'}`}>{m.label}</span>
+                                 </div>
+                             );
+                        })}
+                    </div>
                 </div>
             </header>
             <main className="flex-grow flex items-center justify-center w-full h-full overflow-hidden relative touch-none bg-black" onPointerDown={onPointerDown}>
@@ -784,47 +746,46 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ subLevel, acuityLabel, onExit, on
                             </div>
                         )}
 
-                        {/* Only render snake canvas and game items if IN 'playing' state to prevent clutter on other screens */}
                         {gameState === 'playing' && (
                             <>
                                 <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none z-20" />
 
-                                <div 
-                                    className="absolute flex items-center justify-center transition-all duration-300 animate-pulse" 
-                                    style={{ 
-                                        width: `${cellSize}px`, 
-                                        height: `${cellSize}px`, 
-                                        top: `${target.y * cellSize}px`, 
-                                        left: `${target.x * cellSize}px`, 
-                                        zIndex: 100, 
-                                        borderRadius: target.shape === 'circle' ? '50%' : '0%',
-                                        ...foodGaborStyle,
-                                        boxShadow: '0 0 15px rgba(255,255,255,0.6)'
-                                    }} 
-                                />
-                                
-                                {distractors.map(d => (
+                                {target.x < gridCols && target.y < gridRows && (
                                      <div 
-                                        key={d.id} 
-                                        className="absolute flex items-center justify-center transition-opacity duration-300" 
+                                        className="absolute flex items-center justify-center transition-all duration-300 animate-pulse" 
                                         style={{ 
                                             width: `${cellSize}px`, 
                                             height: `${cellSize}px`, 
-                                            top: `${d.y * cellSize}px`, 
-                                            left: `${d.x * cellSize}px`, 
-                                            zIndex: 5,
-                                            borderRadius: d.shape === 'circle' ? '50%' : '0%',
-                                            ...distractorGaborStyle
+                                            top: `${target.y * cellSize}px`, 
+                                            left: `${target.x * cellSize}px`, 
+                                            zIndex: 100, 
+                                            borderRadius: target.shape === 'circle' ? '50%' : '0%',
+                                            ...foodGaborStyle,
+                                            boxShadow: '0 0 15px rgba(255,255,255,0.6)'
                                         }} 
-                                     />
-                                ))}
+                                    />
+                                )}
+                                
+                                {distractors.map(d => {
+                                     if (d.x >= gridCols || d.y >= gridRows) return null;
+                                     return (
+                                         <div 
+                                            key={d.id} 
+                                            className="absolute flex items-center justify-center transition-opacity duration-300" 
+                                            style={{ 
+                                                width: `${cellSize}px`, 
+                                                height: `${cellSize}px`, 
+                                                top: `${d.y * cellSize}px`, 
+                                                left: `${d.x * cellSize}px`, 
+                                                zIndex: 5,
+                                                borderRadius: d.shape === 'circle' ? '50%' : '0%',
+                                                ...distractorGaborStyle
+                                            }} 
+                                         />
+                                     );
+                                })}
                             </>
                         )}
-                    </div>
-                </div>
-                <div className="absolute bottom-2 left-4 z-20 pointer-events-none">
-                    <div className="bg-slate-800/80 backdrop-blur px-3 py-1 rounded-full shadow-sm border border-slate-700">
-                        <p className="text-xs font-bold text-slate-300">Target: {acuityLabel}</p>
                     </div>
                 </div>
             </main>
@@ -852,7 +813,6 @@ const Level6: React.FC<Level6Props> = ({ setCurrentPage, saveLevelCompletion }) 
         if (subLevel < TOTAL_SUB_LEVELS) {
             setSubLevel(prev => prev + 1);
         } else {
-            // Level 6 Complete (All 100 levels)
             saveLevelCompletion('level6', 3);
             setCurrentPage('home');
         }
@@ -862,10 +822,7 @@ const Level6: React.FC<Level6Props> = ({ setCurrentPage, saveLevelCompletion }) 
         setCurrentPage('home');
     };
 
-    // Placeholder mapping for acuity label based on subLevel
     const getAcuityLabel = (level: number) => {
-        // Simple mapping example: Level 1 = 20/200, Level 100 = 20/20
-        // This is just a visual label
         return `Level ${level}`;
     };
 

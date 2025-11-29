@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Page } from '../../types';
 import LevelLayout from '../LevelLayout';
 import GameEndScreen from '../GameEndScreen';
@@ -9,12 +10,6 @@ interface Level4Props {
   setCurrentPage: (page: Page) => void;
   saveLevelCompletion: (levelId: string, stars: number) => void;
 }
-
-const START_FONT_SIZE = 60;
-const END_FONT_SIZE = 16;
-
-const START_CONTRAST = 1.0;
-const END_CONTRAST = 0.3;
 
 const GRID_SIZE = 100; // 10x10 grid
 
@@ -57,14 +52,41 @@ const Level4: React.FC<Level4Props> = ({ setCurrentPage, saveLevelCompletion }) 
   const [gameState, setGameState] = useState<'playing' | 'finished'>('playing');
   const [awardedStars, setAwardedStars] = useState(0);
   const [showStarAnimation, setShowStarAnimation] = useState(false);
+  
+  // Responsive sizing state
+  const [gridDimension, setGridDimension] = useState(300); // Default safe size
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  // Robust Sizing Logic
   useEffect(() => {
-    document.body.style.overflow = 'hidden';
+    const calculateSize = () => {
+        if (containerRef.current) {
+            const { width, height } = containerRef.current.getBoundingClientRect();
+            // We want a square that fits within the available space
+            // Subtract small padding to avoid touching edges
+            if (width > 0 && height > 0) {
+                const size = Math.min(width, height) - 10;
+                setGridDimension(size > 0 ? size : 300);
+            }
+        }
+    };
+
+    // Initial calc
+    calculateSize();
+
+    // Polling to ensure layout has settled (fixes issues where ref is initially empty/small)
+    const interval = setInterval(calculateSize, 100);
+    const timeout = setTimeout(() => clearInterval(interval), 2000); // Stop polling after 2s
+
+    window.addEventListener('resize', calculateSize);
+
     return () => {
-      document.body.style.overflow = 'auto';
+        window.removeEventListener('resize', calculateSize);
+        clearInterval(interval);
+        clearTimeout(timeout);
     };
   }, []);
-  
+
   useEffect(() => {
     if (gameState !== 'playing') return;
 
@@ -84,13 +106,23 @@ const Level4: React.FC<Level4Props> = ({ setCurrentPage, saveLevelCompletion }) 
     }
   }, [correctClicks, awardedStars, gameState]);
 
-  // Calculate progress and apply an easing function for a non-linear difficulty curve.
-  // This makes the sensitivity (visual difficulty) decrease more slowly at first, then more rapidly.
-  const progress = correctClicks > 0 ? correctClicks / (TARGET_SCORE_L4 - 1) : 0;
-  const easedProgress = Math.pow(progress, 1.5);
+  // Calculate progress ratio (0 to 1)
+  const progressRatio = Math.min(1, correctClicks / TARGET_SCORE_L4);
 
-  const currentFontSize = START_FONT_SIZE - (START_FONT_SIZE - END_FONT_SIZE) * easedProgress;
-  const currentContrast = START_CONTRAST - (START_CONTRAST - END_CONTRAST) * easedProgress;
+  // Dynamic Visual Parameters
+  const cellSize = gridDimension / 10;
+  
+  // Size Logic: Linear decrease from Start to End
+  // Similar to Level 1 and 2
+  const START_SIZE_MULT = 0.75; 
+  const END_SIZE_MULT = 0.35;
+  const currentSizeMultiplier = START_SIZE_MULT - (progressRatio * (START_SIZE_MULT - END_SIZE_MULT));
+  const currentFontSize = cellSize * currentSizeMultiplier; 
+  
+  // Contrast logic: Linear decrease from Start to End
+  const START_CONTRAST = 1.0;
+  const END_CONTRAST = 0.2;
+  const currentContrast = START_CONTRAST - (progressRatio * (START_CONTRAST - END_CONTRAST));
   
   const generateNewRound = useCallback(() => {
     const randomEmoji = EMOJI_GRID_L4[Math.floor(Math.random() * EMOJI_GRID_L4.length)];
@@ -104,7 +136,7 @@ const Level4: React.FC<Level4Props> = ({ setCurrentPage, saveLevelCompletion }) 
     if (gameState === 'playing') {
       generateNewRound();
     }
-  }, [gameState, correctClicks, generateNewRound]);
+  }, [gameState, generateNewRound]);
 
   const handleEmojiClick = (isCorrectChoice: boolean) => {
     if (gameState !== 'playing') return;
@@ -114,31 +146,40 @@ const Level4: React.FC<Level4Props> = ({ setCurrentPage, saveLevelCompletion }) 
       setCorrectClicks(newCorrectClicks);
 
       if (newCorrectClicks >= TARGET_SCORE_L4) {
-        const isSuccess = incorrectClicks === 0;
-        let stars = 0;
-        if (isSuccess) {
-            stars = 3;
-        } else {
-            const percentage = (newCorrectClicks / TARGET_SCORE_L4) * 100;
-            if (percentage > 60) stars = 2;
-            else if (percentage > 30) stars = 1;
-        }
-        
-        if (isSuccess) {
-            setAwardedStars(3);
-            setShowStarAnimation(true);
-            setTimeout(() => {
-                saveLevelCompletion('level4', stars);
-                setGameState('finished');
-            }, 1500);
-        } else {
-            saveLevelCompletion('level4', stars);
-            setGameState('finished');
-        }
+        finishGame(newCorrectClicks, incorrectClicks);
+        return; 
       }
     } else {
       setIncorrectClicks((prev) => prev + 1);
     }
+
+    // Logic Update: Always generate new round, even on wrong click
+    // This keeps the game moving and fixes the "stuck" feeling
+    generateNewRound();
+  };
+
+  const finishGame = (finalCorrect: number, finalIncorrect: number) => {
+      const isSuccess = finalIncorrect === 0;
+      let stars = 0;
+      if (isSuccess) {
+          stars = 3;
+      } else {
+          const percentage = (finalCorrect / TARGET_SCORE_L4) * 100;
+          if (percentage > 60) stars = 2;
+          else if (percentage > 30) stars = 1;
+      }
+      
+      if (isSuccess) {
+          setAwardedStars(3);
+          setShowStarAnimation(true);
+          setTimeout(() => {
+              saveLevelCompletion('level4', stars);
+              setGameState('finished');
+          }, 1500);
+      } else {
+          saveLevelCompletion('level4', stars);
+          setGameState('finished');
+      }
   };
   
   const resetLevel = () => {
@@ -146,6 +187,7 @@ const Level4: React.FC<Level4Props> = ({ setCurrentPage, saveLevelCompletion }) 
     setIncorrectClicks(0);
     setAwardedStars(0);
     setGameState('playing');
+    generateNewRound();
   };
 
   const renderGame = () => {
@@ -162,35 +204,81 @@ const Level4: React.FC<Level4Props> = ({ setCurrentPage, saveLevelCompletion }) 
     }
 
     return (
-      <div className="grid grid-cols-10 w-full max-w-3xl aspect-square mx-auto p-1 gap-1">
-        {Array.from({ length: GRID_SIZE }).map((_, index) => (
-             <GaborEmoji
-                key={`${correctClicks}-${index}`} // Add correctClicks to key to force re-render
-                hasGaborPatch={index === correctIndex}
-                contrast={currentContrast}
-                fontSize={currentFontSize}
-                onClick={() => handleEmojiClick(index === correctIndex)}
-                className="w-full h-full flex items-center justify-center"
-            >
-                {currentEmoji}
-            </GaborEmoji>
-        ))}
-      </div>
+        // Grid Container
+        <div 
+            className="grid grid-cols-10 gap-0 bg-slate-200 border border-slate-300 shadow-sm"
+            style={{ width: gridDimension, height: gridDimension }}
+        >
+            {Array.from({ length: GRID_SIZE }).map((_, index) => (
+                 <div 
+                    key={`${index}`} 
+                    className="w-full h-full flex items-center justify-center bg-white border-[0.5px] border-slate-100"
+                 >
+                    <GaborEmoji
+                        hasGaborPatch={index === correctIndex}
+                        contrast={currentContrast}
+                        fontSize={currentFontSize}
+                        onClick={() => handleEmojiClick(index === correctIndex)}
+                        className="w-full h-full flex items-center justify-center cursor-pointer select-none hover:bg-slate-50 active:bg-slate-100"
+                    >
+                        {currentEmoji || '❓'}
+                    </GaborEmoji>
+                </div>
+            ))}
+        </div>
     );
   };
   
+  // Percentage for progress bar
+  const percentage = Math.min(100, (correctClicks / TARGET_SCORE_L4) * 100);
+
   return (
     <LevelLayout levelId={4} setCurrentPage={setCurrentPage}>
       <FireworksReward show={showStarAnimation} />
-      <div className="w-full flex-grow flex items-center justify-center min-h-0">
-        {renderGame()}
-      </div>
-       {gameState === 'playing' && (
-        <div className="shrink-0 flex justify-center space-x-2 sm:space-x-4 my-2 w-full max-w-xs sm:max-w-sm">
-            <div className="bg-cyan-600 text-white p-2 sm:p-3 rounded-lg shadow-md flex-1 text-center font-bold text-sm sm:text-lg">Score: {correctClicks}/{TARGET_SCORE_L4}</div>
-            <div className="bg-rose-500 text-white p-2 sm:p-3 rounded-lg shadow-md flex-1 text-center font-bold text-sm sm:text-lg">Incorrect: {incorrectClicks}</div>
+      
+      {/* 
+         Structure:
+         1. Main Container (flex col, h-full)
+         2. Game Area (flex-grow) - ref={containerRef}
+         3. Footer (flex-none)
+      */}
+      <div className="flex flex-col w-full h-full max-h-full overflow-hidden items-center">
+        
+        {/* Game Area - Takes available space */}
+        <div ref={containerRef} className="flex-grow w-full flex items-center justify-center overflow-hidden p-1">
+            {renderGame()}
         </div>
-      )}
+
+        {/* Footer Area - Distinct, static height, placed below items */}
+        {gameState === 'playing' && (
+            <div className="flex-none w-full max-w-sm px-4 pb-2 pt-1 z-10">
+                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3">
+                    {/* Progress Bar */}
+                    <div className="mb-2">
+                        <div className="flex justify-between items-center mb-1 text-slate-600">
+                            <span className="text-[10px] font-bold uppercase tracking-wider">Progress</span>
+                            <span className="text-[10px] font-bold">{Math.round(percentage)}%</span>
+                        </div>
+                        <div className="progress-bar-container-thin h-2 bg-slate-200 rounded-full overflow-hidden">
+                            <div className="progress-bar-fill-thin h-full bg-cyan-500 transition-all duration-300" style={{ width: `${percentage}%` }}></div>
+                        </div>
+                    </div>
+                    
+                    {/* Score Pills */}
+                    <div className="flex justify-center space-x-2">
+                        <div className="bg-cyan-600 text-white py-1 px-3 rounded shadow-sm flex-1 text-center flex flex-col justify-center">
+                            <span className="text-[9px] uppercase opacity-80 leading-none mb-0.5">Score</span>
+                            <span className="font-bold text-sm leading-none">{correctClicks}/{TARGET_SCORE_L4}</span>
+                        </div>
+                        <div className="bg-rose-500 text-white py-1 px-3 rounded shadow-sm flex-1 text-center flex flex-col justify-center">
+                            <span className="text-[9px] uppercase opacity-80 leading-none mb-0.5">Mistakes</span>
+                            <span className="font-bold text-sm leading-none">{incorrectClicks}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+      </div>
     </LevelLayout>
   );
 };
