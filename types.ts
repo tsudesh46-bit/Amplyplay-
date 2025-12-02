@@ -2,6 +2,7 @@
 export type Page = 
   | 'home' 
   | 'performance' 
+  | 'profile'
   | 'level1' 
   | 'level2' 
   | 'level3' 

@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 interface IconProps {
@@ -19,6 +20,12 @@ export const CloseIcon: React.FC<IconProps> = ({ className = "w-6 h-6" }) => (
 export const HomeIcon: React.FC<IconProps> = ({ className = "w-10 h-10" }) => (
     <svg className={className} fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8h5z"></path>
+    </svg>
+);
+
+export const UserIcon: React.FC<IconProps> = ({ className = "w-6 h-6" }) => (
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
     </svg>
 );
 

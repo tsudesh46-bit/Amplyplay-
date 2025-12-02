@@ -2,8 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Page } from '../../types';
 import GaborCircle from '../GaborCircle';
-import { HomeIcon, HeartIcon, HeartOutlineIcon, XCircleIcon, CheckCircleIcon, NextIcon, PlayIcon } from '../ui/Icons';
-import { RetryIcon } from '../ui/Icons';
+import { HomeIcon, HeartIcon, HeartOutlineIcon, XCircleIcon, CheckCircleIcon, NextIcon, LogoIcon, RetryIcon } from '../ui/Icons';
 import ConfirmationModal from '../ConfirmationModal';
 
 // --- Helper Functions ---
@@ -39,18 +38,21 @@ const getEcgPattern = (midY: number, baseAmplitude: number) => {
   return p;
 };
 
-const checkOverlap = (newPatch: {x: number, y: number}, existingPatches: {x: number, y: number}[]) => {
-    // Patches are positioned by center % (x, y).
-    // Assume a safety threshold distance in %. 
-    // 150px on a typical screen is roughly 15-20%. We use 22% to be safe and avoid overlap.
-    const THRESHOLD = 22; 
+// Updated: Accepts a custom threshold to handle different visual sizes
+const checkOverlap = (newPatch: {x: number, y: number}, existingPatches: {x: number, y: number}[], threshold: number = 20) => {
     for (const p of existingPatches) {
         const dx = p.x - newPatch.x;
         const dy = p.y - newPatch.y;
         const dist = Math.sqrt(dx*dx + dy*dy);
-        if (dist < THRESHOLD) return true;
+        if (dist < threshold) return true;
     }
     return false;
+};
+
+// Helper to generate Y positions mimicking ECG features
+// Strictly on the wave baseline to avoid being out of range
+const getEcgYPosition = () => {
+    return 50 + (Math.random() * 4 - 2); 
 };
 
 // --- Helper Components ---
@@ -87,7 +89,7 @@ const SimpleECGCanvas: React.FC = () => {
              
              ctx.beginPath();
              ctx.strokeStyle = '#ef4444'; // Red-500
-             ctx.lineWidth = 5; // Thicker line
+             ctx.lineWidth = 5; 
              ctx.lineJoin = 'round';
              ctx.lineCap = 'round';
 
@@ -152,7 +154,6 @@ const ClickExplosion: React.FC<{ x: number; y: number; onComplete: () => void }>
             className="fixed pointer-events-none z-50" 
             style={{ left: x, top: y, transform: 'translate(-50%, -50%)' }}
         >
-             {/* Particles - Updated to Brand Colors (Cyan/Teal) */}
              {Array.from({ length: 16 }).map((_, i) => (
                  <div
                     key={i}
@@ -164,7 +165,6 @@ const ClickExplosion: React.FC<{ x: number; y: number; onComplete: () => void }>
                     }}
                  />
              ))}
-             
              <style>{`
                 ${Array.from({ length: 16 }).map((_, i) => `
                     @keyframes particle-burst-${i} {
@@ -177,7 +177,6 @@ const ClickExplosion: React.FC<{ x: number; y: number; onComplete: () => void }>
     );
 };
 
-// --- Home Button Component (Level 3 Style) ---
 const RingHomeButton: React.FC<{ onClick: () => void, className?: string }> = ({ onClick, className = "" }) => (
     <button
       onClick={onClick}
@@ -202,8 +201,8 @@ interface PeripheralPatch {
     id: string;
     type: 'gabor' | 'fake';
     size: number;
-    x: number; // Percent 0-100
-    y: number; // Percent 0-100 (Relative to container)
+    x: number;
+    y: number;
     side: 'top' | 'bottom';
 }
 
@@ -211,8 +210,8 @@ interface CentralPatch {
     id: string;
     type: 'gabor' | 'fake';
     size: number;
-    x: number; // Percent 0-100
-    y: number; // Percent 0-100
+    x: number;
+    y: number;
     contrast?: number;
 }
 
@@ -223,217 +222,239 @@ interface Explosion {
 }
 
 const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
-    // 'feedback' state added to show Correct/Incorrect result
-    const [gameState, setGameState] = useState<'playing' | 'input' | 'feedback' | 'gameOver' | 'pausedManually'>('playing');
+    // Game State now includes 'intro'
+    const [gameState, setGameState] = useState<'intro' | 'playing' | 'input' | 'feedback' | 'gameOver' | 'pausedManually'>('intro');
     const [showExitConfirm, setShowExitConfirm] = useState(false);
     
     // Scores
     const [centralScore, setCentralScore] = useState(0); 
     const [peripheralScore, setPeripheralScore] = useState(0);
     
-    // Lives - Split into Central and Peripheral
+    // Lives
     const [centralLives, setCentralLives] = useState(3);
     const [peripheralLives, setPeripheralLives] = useState(3);
     
     // Central Counting Task Logic
     const [centralInputValue, setCentralInputValue] = useState('');
-    const [roundTimeLeft, setRoundTimeLeft] = useState(0);
-    const [isRoundActive, setIsRoundActive] = useState(false);
     const [centralPatches, setCentralPatches] = useState<CentralPatch[]>([]);
     const [feedbackData, setFeedbackData] = useState<{isCorrect: boolean, count: number} | null>(null);
     
+    // Central Task Cycle State Machine
+    const [centralCyclePhase, setCentralCyclePhase] = useState<'init' | 'spawn' | 'hold' | 'finished'>('init');
+    
     // Peripheral Logic
     const [peripheralPatches, setPeripheralPatches] = useState<PeripheralPatch[]>([]);
-    const [contrast, setContrast] = useState(1.0);
+    const [distractorPatches, setDistractorPatches] = useState<PeripheralPatch[]>([]);
+    
     const [explosions, setExplosions] = useState<Explosion[]>([]);
 
     // Refs
-    const roundTimerRef = useRef<number | null>(null);
-    const centralSpawnTimerRef = useRef<number | null>(null);
-    const peripheralSpawnTimerRef = useRef<number | null>(null);
+    const peripheralRoundTimerRef = useRef<number | null>(null);
     const targetCounterRef = useRef(0);
-    const centralPatchesRef = useRef<CentralPatch[]>([]); // To track current patches for overlap in async calls
+    const cyclesRemainingRef = useRef(0);
+    const centralScoreRef = useRef(0);
+    const peripheralScoreRef = useRef(0);
 
     useEffect(() => {
-        centralPatchesRef.current = centralPatches;
-    }, [centralPatches]);
+        centralScoreRef.current = centralScore;
+    }, [centralScore]);
 
-    // Start a new counting round
-    const startCentralRound = useCallback(() => {
-        const duration = Math.floor(Math.random() * 30) + 20; // 20-50 seconds (less than 60)
-        setRoundTimeLeft(duration);
-        targetCounterRef.current = 0;
-        setCentralPatches([]);
-        setIsRoundActive(true);
-        setCentralInputValue('');
-        setGameState('playing');
-        setFeedbackData(null);
+    useEffect(() => {
+        peripheralScoreRef.current = peripheralScore;
+    }, [peripheralScore]);
 
-        if (roundTimerRef.current) clearInterval(roundTimerRef.current);
-        roundTimerRef.current = window.setInterval(() => {
-            setRoundTimeLeft(prev => {
-                if (prev <= 1) {
-                    clearInterval(roundTimerRef.current!);
-                    clearInterval(centralSpawnTimerRef.current!);
-                    setCentralPatches([]);
-                    setGameState('input');
-                    return 0;
-                }
-                return prev - 1;
-            });
-        }, 1000);
+    // --- Central Task Cycle Logic ---
+    useEffect(() => {
+        if (gameState !== 'playing') {
+            setCentralPatches([]);
+            return;
+        }
 
-        if (centralSpawnTimerRef.current) clearInterval(centralSpawnTimerRef.current);
-        
-        // Continuous Random Spawning
-        centralSpawnTimerRef.current = window.setInterval(() => {
-            // Chance to spawn a patch every tick
-            if (Math.random() > 0.4) {
-                // Base size: 2cm radius ~ 4cm diameter ~ 150px
-                const baseSize = 150; 
-                
-                let attempts = 0;
-                let x = 50, y = 50;
-                let validPos = false;
+        let timer: ReturnType<typeof setTimeout>;
 
-                // Try to find a non-overlapping position
-                while(attempts < 15) {
-                    x = Math.random() * 80 + 10;
-                    y = Math.random() * 80 + 10;
-                    if (!checkOverlap({x, y}, centralPatchesRef.current)) {
-                        validPos = true;
-                        break;
-                    }
-                    attempts++;
-                }
-
-                if (validPos) {
-                    // Decide type: 40% Target, 60% Fake
-                    const isTarget = Math.random() < 0.4;
-                    const id = `c-${isTarget ? 'target' : 'fake'}-${Date.now()}-${Math.random()}`;
-                    
-                    const newPatch: CentralPatch = {
-                        id,
-                        type: isTarget ? 'gabor' : 'fake',
-                        size: baseSize,
-                        x,
-                        y,
-                        contrast: isTarget ? (0.5 + Math.random() * 0.5) : 1
-                    };
-
-                    if (isTarget) {
-                        targetCounterRef.current += 1;
-                    }
-
-                    setCentralPatches(prev => [...prev, newPatch]);
-
-                    // Schedule removal after lifetime (1.5s - 2.5s)
-                    const lifeTime = 1500 + Math.random() * 1000;
-                    setTimeout(() => {
-                        setCentralPatches(prev => prev.filter(p => p.id !== id));
-                    }, lifeTime);
-                }
+        const runLogic = () => {
+            if (centralCyclePhase === 'init') {
+                // Initialize round parameters
+                targetCounterRef.current = 0;
+                cyclesRemainingRef.current = Math.floor(Math.random() * 5) + 3; // 3 to 7 flashes
+                setCentralCyclePhase('spawn');
             }
-        }, 600); // Check every 600ms
+            else if (centralCyclePhase === 'spawn') {
+                // Check if we are done with cycles
+                if (cyclesRemainingRef.current <= 0) {
+                    setCentralCyclePhase('finished');
+                    return;
+                }
 
-    }, []);
+                cyclesRemainingRef.current -= 1;
 
-    // Peripheral Spawning Logic - Refreshes every 5 seconds
-    const spawnPeripheral = useCallback(() => {
-        const newPatches: PeripheralPatch[] = [];
+                // Spawn Patches
+                const currentScore = centralScoreRef.current;
+                const fakeCount = 1 + Math.floor(currentScore / 3);
+                
+                const newPatches: CentralPatch[] = [];
+                const patchesToSpawn = [
+                    { type: 'gabor' },
+                    ...Array(fakeCount).fill({ type: 'fake' })
+                ];
+
+                patchesToSpawn.forEach((p, i) => {
+                    let attempts = 0;
+                    let valid = false;
+                    let x = 50, y = 50;
+                    const size = 100 + Math.random() * 60; 
+
+                    while (attempts < 20) {
+                        x = Math.random() * 80 + 10;
+                        y = Math.random() * 80 + 10;
+                        // Use 25% threshold for central task as elements are larger
+                        if (!checkOverlap({x, y}, newPatches, 25)) {
+                            valid = true;
+                            break;
+                        }
+                        attempts++;
+                    }
+
+                    if (valid) {
+                        const contrast = 0.3 + Math.random() * 0.7;
+                        newPatches.push({
+                            id: `c-${Date.now()}-${i}`,
+                            type: p.type as 'gabor' | 'fake',
+                            size,
+                            x,
+                            y,
+                            contrast
+                        });
+                        if (p.type === 'gabor') {
+                            targetCounterRef.current += 1;
+                        }
+                    }
+                });
+
+                setCentralPatches(newPatches);
+                
+                // Stay visible for 500ms
+                timer = setTimeout(() => {
+                    setCentralCyclePhase('hold');
+                }, 500);
+            }
+            else if (centralCyclePhase === 'hold') {
+                // Clear patches
+                setCentralPatches([]);
+                
+                // Wait invisible for 500ms
+                timer = setTimeout(() => {
+                    setCentralCyclePhase('spawn');
+                }, 500);
+            }
+            else if (centralCyclePhase === 'finished') {
+                // End of round, trigger input
+                setCentralPatches([]);
+                // Small buffer before input appears
+                timer = setTimeout(() => {
+                    setGameState('input');
+                }, 500);
+            }
+        };
+
+        runLogic();
+
+        return () => clearTimeout(timer);
+    }, [centralCyclePhase, gameState]);
+
+
+    // Peripheral Spawning Logic - Refined to prevent overlap
+    const spawnPeripheralRound = useCallback(() => {
         const timestamp = Date.now();
-        
-        // Decide target location (50/50 Top or Bottom)
+        const existingPositions: {x: number, y: number}[] = [];
+        const SAFE_DISTANCE = 18; // Overlap threshold for peripheral items
+
+        // 1. Generate Target
         const targetSide = Math.random() > 0.5 ? 'top' : 'bottom';
-        const targetId = `p-target-${timestamp}`;
+        const targetSize = Math.random() * 30 + 40; 
+        const targetX = Math.random() * 80 + 10;
+        const targetY = getEcgYPosition();
+        
+        existingPositions.push({ x: targetX, y: targetY });
 
-        // Add Target
-        newPatches.push({
-            id: targetId,
+        const newTarget: PeripheralPatch = {
+            id: `p-target-${timestamp}`,
             type: 'gabor',
-            size: Math.random() * 30 + 40, // 40-70px
-            x: Math.random() * 80 + 10,
-            y: Math.random() * 60 + 20, // Avoid extreme edges vertically
+            size: targetSize, 
+            x: targetX,
+            y: targetY,
             side: targetSide
-        });
+        };
         
-        // Add Fake Patches (Distractors) for BOTH sides
-        // Top Distractors
-        const topCount = Math.floor(Math.random() * 3) + 2; // 2-4 patches
-        for(let i=0; i<topCount; i++) {
-             newPatches.push({
-                id: `p-fake-top-${timestamp}-${i}`,
-                type: 'fake',
-                // Varied sizes for fake patches: 20px - 70px range
-                size: Math.random() * 50 + 20, 
-                x: Math.random() * 90 + 5,
-                y: Math.random() * 60 + 20,
-                side: 'top'
-            });
+        // 2. Generate Distractors with Collision Check
+        const score = peripheralScoreRef.current;
+        const totalDistractors = 2 + Math.floor(score / 5);
+        const newDistractors: PeripheralPatch[] = [];
+        
+        for(let i=0; i<totalDistractors; i++) {
+             const distSide = Math.random() > 0.5 ? 'top' : 'bottom';
+             const distSize = Math.random() * 40 + 35; 
+             let x = 50, y = 50;
+             let attempts = 0;
+             let valid = false;
+
+             while(attempts < 20) {
+                 x = Math.random() * 90 + 5;
+                 y = getEcgYPosition();
+                 
+                 // Check against target and all previously added distractors
+                 if (!checkOverlap({x, y}, existingPositions, SAFE_DISTANCE)) {
+                     valid = true;
+                     break;
+                 }
+                 attempts++;
+             }
+
+             if (valid) {
+                 existingPositions.push({x, y});
+                 newDistractors.push({
+                    id: `p-fake-${timestamp}-${i}`,
+                    type: 'fake',
+                    size: distSize, 
+                    x,
+                    y, 
+                    side: distSide
+                });
+             }
         }
 
-        // Bottom Distractors
-        const bottomCount = Math.floor(Math.random() * 3) + 2;
-        for(let i=0; i<bottomCount; i++) {
-             newPatches.push({
-                id: `p-fake-bot-${timestamp}-${i}`,
-                type: 'fake',
-                // Varied sizes for fake patches: 20px - 70px range
-                size: Math.random() * 50 + 20,
-                x: Math.random() * 90 + 5,
-                y: Math.random() * 60 + 20,
-                side: 'bottom'
-            });
-        }
-        
-        setPeripheralPatches(newPatches);
+        setPeripheralPatches([newTarget]);
+        setDistractorPatches(newDistractors);
+
     }, []);
 
-    // Main Game Loop management
+    // Peripheral Loop
     useEffect(() => {
         if (gameState === 'playing') {
-            if (!isRoundActive) {
-                startCentralRound();
-            }
-
-            // Peripheral Loop - Refresh every 5 seconds
-            spawnPeripheral(); // Initial spawn
-            if (peripheralSpawnTimerRef.current) clearInterval(peripheralSpawnTimerRef.current);
-            peripheralSpawnTimerRef.current = window.setInterval(() => {
-                spawnPeripheral();
-            }, 5000); 
-            
+            spawnPeripheralRound(); 
+            peripheralRoundTimerRef.current = window.setInterval(() => {
+                spawnPeripheralRound();
+            }, 3000);
         } else {
-            if (roundTimerRef.current) clearInterval(roundTimerRef.current);
-            if (centralSpawnTimerRef.current) clearInterval(centralSpawnTimerRef.current);
-            if (peripheralSpawnTimerRef.current) clearInterval(peripheralSpawnTimerRef.current);
+            if (peripheralRoundTimerRef.current) clearInterval(peripheralRoundTimerRef.current);
         }
 
         return () => {
-            if (roundTimerRef.current) clearInterval(roundTimerRef.current);
-            if (centralSpawnTimerRef.current) clearInterval(centralSpawnTimerRef.current);
-            if (peripheralSpawnTimerRef.current) clearInterval(peripheralSpawnTimerRef.current);
+            if (peripheralRoundTimerRef.current) clearInterval(peripheralRoundTimerRef.current);
         };
-    }, [gameState, isRoundActive, startCentralRound, spawnPeripheral]);
+    }, [gameState, spawnPeripheralRound]);
 
 
     const handlePeripheralClick = (patch: PeripheralPatch, e: React.MouseEvent) => {
         if (gameState !== 'playing') return;
         
         if (patch.type === 'gabor') {
-            // Correct Click
-            setPeripheralScore(prev => prev + 1); // 1 point per touch
+            setPeripheralScore(prev => prev + 1);
             
-            // Trigger Explosion
             const id = `exp-${Date.now()}`;
             setExplosions(prev => [...prev, { id, x: e.clientX, y: e.clientY }]);
-            
-            // Remove the clicked patch so it doesn't get clicked again in this cycle
             setPeripheralPatches(prev => prev.filter(p => p.id !== patch.id));
-
         } else {
-            // Fake Click - Decrease Peripheral Lives
-            // Logic: Consistent life loss.
             setPeripheralLives(prev => {
                 const newLives = prev - 1;
                 if (newLives <= 0) setGameState('gameOver');
@@ -446,39 +467,35 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
         e.preventDefault();
         const count = parseInt(centralInputValue);
         const actual = targetCounterRef.current;
-        const diff = Math.abs(count - actual);
         
-        let correct = false;
+        if (isNaN(count)) return;
+
+        const correct = (count === actual);
         
-        if (diff === 0) {
-            setCentralScore(prev => prev + 1); // 1 point
-            correct = true;
-        } else {
-             // Wrong count - Feedback will allow Resume (Lose Life) or Exit
-             correct = false;
+        if (correct) {
+            setCentralScore(prev => prev + 1);
         }
         
         setFeedbackData({ isCorrect: correct, count: actual });
-        setIsRoundActive(false); 
-        setGameState('feedback'); // Go to feedback screen
+        setGameState('feedback');
         setCentralInputValue('');
     };
     
-    // Feedback Handlers
+    // Feedback Actions
     const handleFeedbackContinue = () => {
-        // Correct Answer -> Next Round
+        setCentralCyclePhase('init'); // Reset cycle
         setGameState('playing');
     };
 
     const handleFeedbackResume = () => {
-        // Incorrect Answer -> Resume means start new round but lose a life
+        // Lose a life but continue
         setCentralLives(prev => {
             const newLives = prev - 1;
             if (newLives <= 0) {
                  setGameState('gameOver');
                  return newLives;
             }
-            // If still alive, go to playing
+            setCentralCyclePhase('init'); // Reset cycle
             setGameState('playing');
             return newLives;
         });
@@ -511,18 +528,101 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
         setPeripheralScore(0);
         setCentralPatches([]);
         setPeripheralPatches([]);
-        setIsRoundActive(false);
+        setDistractorPatches([]);
+        setCentralCyclePhase('init');
         setGameState('playing');
     };
 
-    // --- Render ---
+    // --- Render Intro Screen ---
+    if (gameState === 'intro') {
+        return (
+            <div className="flex flex-col items-center justify-center h-screen w-full bg-slate-50 p-4 relative overflow-hidden">
+                {/* Background Decorations */}
+                <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-cyan-200/20 rounded-full blur-3xl animate-pulse"></div>
+                <div className="absolute bottom-[-10%] left-[-10%] w-96 h-96 bg-teal-200/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+    
+                <div className="bg-white/80 backdrop-blur-xl p-8 rounded-[2rem] shadow-2xl max-w-sm w-full text-center relative border border-white/50 animate-fade-in-up">
+                     {/* Icon with Rings */}
+                     <div className="relative flex justify-center items-center mb-10 mt-2">
+                         {/* Outer Rings */}
+                         <div className="absolute w-40 h-40 rounded-full border border-cyan-100 animate-[spin_10s_linear_infinite]"></div>
+                         <div className="absolute w-32 h-32 rounded-full border-2 border-cyan-200/60 animate-pulse"></div>
+                         <div className="absolute w-28 h-28 rounded-full border border-teal-200 animate-[spin_8s_linear_infinite_reverse]"></div>
+                         
+                         {/* Glow */}
+                         <div className="absolute w-20 h-20 bg-cyan-400/20 rounded-full blur-xl"></div>
+                         
+                         {/* Main Icon */}
+                         <div className="relative z-10 bg-gradient-to-br from-white to-slate-50 p-3 rounded-full shadow-lg border border-cyan-100">
+                             <LogoIcon className="w-14 h-14" />
+                         </div>
+                     </div>
+    
+                     <h1 className="text-2xl font-bold text-slate-800 mb-6 font-pixel tracking-tighter">LEVEL 05</h1>
+    
+                     {/* 3 Short Points */}
+                     <div className="space-y-3 mb-10 text-left">
+                        <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-xl border border-slate-100 shadow-sm transition-transform hover:scale-105">
+                             <div className="w-8 h-8 rounded-full bg-cyan-500 text-white flex items-center justify-center font-bold text-sm shadow-md shrink-0">1</div>
+                             <p className="text-slate-600 text-sm font-semibold leading-tight">Count central patterns</p>
+                        </div>
+                        <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-xl border border-slate-100 shadow-sm transition-transform hover:scale-105">
+                             <div className="w-8 h-8 rounded-full bg-teal-500 text-white flex items-center justify-center font-bold text-sm shadow-md shrink-0">2</div>
+                             <p className="text-slate-600 text-sm font-semibold leading-tight">Click wave targets</p>
+                        </div>
+                         <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-xl border border-slate-100 shadow-sm transition-transform hover:scale-105">
+                             <div className="w-8 h-8 rounded-full bg-rose-500 text-white flex items-center justify-center font-bold text-sm shadow-md shrink-0">3</div>
+                             <p className="text-slate-600 text-sm font-semibold leading-tight">Watch score & lives</p>
+                        </div>
+                     </div>
+    
+                     {/* Buttons */}
+                     <div className="flex items-center gap-4">
+                         <button 
+                            onClick={() => setCurrentPage('home')}
+                            className="w-14 h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-sm"
+                            aria-label="Home"
+                         >
+                              <HomeIcon className="w-6 h-6" />
+                         </button>
+                         <button 
+                            onClick={() => {
+                                setGameState('playing');
+                                setCentralCyclePhase('init'); 
+                            }} 
+                            className="flex-1 h-14 bg-gradient-to-r from-cyan-600 to-teal-500 hover:from-cyan-500 hover:to-teal-400 text-white font-bold rounded-2xl shadow-lg shadow-cyan-500/25 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 tracking-wide"
+                         >
+                              START
+                         </button>
+                     </div>
+                </div>
+                <style>{`
+                    @keyframes fade-in-up {
+                        from { opacity: 0; transform: translateY(20px); }
+                        to { opacity: 1; transform: translateY(0); }
+                    }
+                    .animate-fade-in-up {
+                        animation: fade-in-up 0.5s ease-out forwards;
+                    }
+                `}</style>
+            </div>
+        );
+    }
+
+    // --- Render Game ---
 
     const renderPeripheralArea = (side: 'top' | 'bottom') => {
-        const patches = peripheralPatches.filter(p => p.side === side);
+        const targetPatches = peripheralPatches.filter(p => p.side === side);
+        const distractors = distractorPatches.filter(p => p.side === side);
+        const allPatches = [...targetPatches, ...distractors];
+        
+        // Dynamic Opacity/Contrast Calculation
+        const dynamicContrast = Math.max(0.2, 1.0 - (peripheralScore * 0.05));
+
         return (
              <div className={`flex-1 relative bg-black flex items-center justify-center overflow-hidden border-${side === 'top' ? 'b' : 't'} border-slate-700`}>
                 <SimpleECGCanvas />
-                {patches.map(patch => (
+                {allPatches.map(patch => (
                     <div 
                         key={patch.id}
                         className="absolute animate-pop-in z-20"
@@ -530,9 +630,14 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
                     >
                          <GaborCircle 
                              size={patch.size} 
-                             contrast={patch.type === 'gabor' ? contrast : contrast * 0.2}
+                             contrast={dynamicContrast} 
                              onClick={(e) => handlePeripheralClick(patch, e)}
-                             style={patch.type === 'fake' ? { backgroundImage: 'none', backgroundColor: '#333' } : { boxShadow: '0 0 10px rgba(255,255,255,0.5)' }}
+                             style={patch.type === 'fake' ? { 
+                                 backgroundImage: 'none', 
+                                 backgroundColor: '#888',
+                                 boxShadow: '0 0 10px rgba(136,136,136,0.5)', 
+                                 border: 'none'
+                             } : { boxShadow: '0 0 10px rgba(255,255,255,0.5)' }}
                          />
                     </div>
                 ))}
@@ -547,60 +652,38 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
             <header className="flex-none p-3 bg-gradient-to-r from-cyan-600 to-teal-400 shadow-md z-10 flex justify-between items-center text-white">
                  <div className="flex items-center gap-6">
                      <RingHomeButton onClick={handleHomeClick} />
-                     
-                     {/* Score */}
                      <div className="bg-white/20 backdrop-blur-md border border-white/30 px-4 py-2 rounded-xl flex flex-col items-center min-w-[90px] shadow-sm">
-                           <div className="text-[10px] font-bold text-cyan-50 uppercase tracking-wider">
-                               Score
-                           </div>
-                           <div className="text-2xl font-bold leading-none drop-shadow-sm">
-                               {centralScore + peripheralScore}
-                           </div>
+                           <div className="text-[10px] font-bold text-cyan-50 uppercase tracking-wider">Score</div>
+                           <div className="text-2xl font-bold leading-none drop-shadow-sm">{centralScore + peripheralScore}</div>
                       </div>
                  </div>
 
-                 {/* Lives */}
                  <div className="flex gap-6 pr-2">
-                     {/* Central Lives (Blue) */}
                      <div className="flex flex-col items-center">
                          <div className="flex items-center gap-1">
                              {Array.from({length:3}).map((_, i) => (
-                                 i < centralLives ? 
-                                    <HeartIcon key={i} className="w-7 h-7 fill-current text-blue-600 drop-shadow-md stroke-white stroke-1"/> : 
-                                    <HeartOutlineIcon key={i} className="w-7 h-7 opacity-50 text-blue-100"/>
+                                 i < centralLives ? <HeartIcon key={i} className="w-7 h-7 fill-current text-blue-600 drop-shadow-md stroke-white stroke-1"/> : <HeartOutlineIcon key={i} className="w-7 h-7 opacity-50 text-blue-100"/>
                              ))}
                          </div>
-                         <div className="text-[10px] font-bold text-cyan-50 uppercase mt-1 tracking-wider">
-                             Cen. Task
-                         </div>
+                         <div className="text-[10px] font-bold text-cyan-50 uppercase mt-1 tracking-wider">Cen. Task</div>
                      </div>
-
-                     {/* Peripheral Lives (Red) */}
                      <div className="flex flex-col items-center">
                          <div className="flex items-center gap-1">
                              {Array.from({length:3}).map((_, i) => (
-                                 i < peripheralLives ? 
-                                    <HeartIcon key={i} className="w-7 h-7 fill-current text-red-600 drop-shadow-md stroke-white stroke-1"/> : 
-                                    <HeartOutlineIcon key={i} className="w-7 h-7 opacity-50 text-red-100"/>
+                                 i < peripheralLives ? <HeartIcon key={i} className="w-7 h-7 fill-current text-red-600 drop-shadow-md stroke-white stroke-1"/> : <HeartOutlineIcon key={i} className="w-7 h-7 opacity-50 text-red-100"/>
                              ))}
                          </div>
-                         <div className="text-[10px] font-bold text-cyan-50 uppercase mt-1 tracking-wider">
-                             Peri. Task
-                         </div>
+                         <div className="text-[10px] font-bold text-cyan-50 uppercase mt-1 tracking-wider">Peri. Task</div>
                      </div>
                   </div>
             </header>
 
             {/* --- Main Game Area --- */}
             <main className="flex-grow flex flex-col relative overflow-hidden">
-                 
-                 {/* Top Peripheral Area */}
                  {renderPeripheralArea('top')}
 
-                 {/* Middle Central Area (White + Patches) */}
+                 {/* Middle Central Area */}
                  <div className="flex-1 relative bg-white flex items-center justify-center overflow-hidden border-y-4 border-slate-200">
-                     {/* REMOVED BLUE TIMER BAR HERE */}
-
                      {centralPatches.map(patch => (
                          <div
                              key={patch.id}
@@ -622,60 +705,44 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
                                      className="pointer-events-none shadow-xl"
                                  />
                              ) : (
-                                 <div className="w-full h-full rounded-full bg-slate-300 opacity-50" />
+                                 <div 
+                                     className="w-full h-full rounded-full"
+                                     style={{ 
+                                         backgroundColor: '#888',
+                                         opacity: patch.contrast || 0.5,
+                                         boxShadow: '0 0 10px rgba(136,136,136,0.5)'
+                                     }}
+                                 />
                              )}
                          </div>
                      ))}
-                     
-                     {/* VISUAL LEGEND for Central Task - Updated to remove Text */}
-                     {gameState === 'playing' && centralPatches.length === 0 && roundTimeLeft > 0 && (
-                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-50 select-none">
-                            <div className="flex gap-12 p-6 bg-slate-50 rounded-3xl border border-slate-100">
-                                <div className="flex flex-col items-center gap-3">
-                                    <GaborCircle size={80} contrast={1.0} onClick={()=>{}} className="shadow-md pointer-events-none" />
-                                </div>
-                                <div className="w-px bg-slate-200"></div>
-                                <div className="flex flex-col items-center gap-3">
-                                     <div className="w-[80px] h-[80px] rounded-full bg-slate-300 shadow-inner" />
-                                </div>
-                            </div>
-                         </div>
-                     )}
                  </div>
 
-                 {/* Bottom Peripheral Area */}
                  {renderPeripheralArea('bottom')}
 
-                 {/* Explosion Effects Layer */}
                  {explosions.map(exp => (
-                     <ClickExplosion 
-                        key={exp.id} 
-                        x={exp.x} 
-                        y={exp.y} 
-                        onComplete={() => setExplosions(prev => prev.filter(e => e.id !== exp.id))} 
-                     />
+                     <ClickExplosion key={exp.id} x={exp.x} y={exp.y} onComplete={() => setExplosions(prev => prev.filter(e => e.id !== exp.id))} />
                  ))}
-
             </main>
 
             {/* --- Overlays --- */}
 
-            {/* Input Overlay (Transparent) */}
+            {/* Input Overlay */}
             {gameState === 'input' && (
-                <div className="absolute inset-0 z-40 bg-slate-900/60 backdrop-blur-md flex items-center justify-center">
-                    <div className="bg-white/20 backdrop-blur-md border border-white/20 p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center animate-fade-in-up">
-                         <h2 className="text-2xl font-bold text-white mb-4 drop-shadow-md">Time's Up!</h2>
-                         <p className="text-lg text-white/90 mb-6">How many <span className="font-bold text-white">Gabor Patches</span>?</p>
+                <div className="absolute inset-0 z-40 bg-slate-900/10 backdrop-blur-[2px] flex items-center justify-center">
+                    <div className="bg-white/20 backdrop-blur-md border border-white/40 p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center animate-fade-in-up">
+                         <h2 className="text-2xl font-bold text-slate-800 mb-4 drop-shadow-sm">Count Check!</h2>
+                         <p className="text-lg text-slate-700 font-bold mb-6">How many <span className="text-cyan-700">Pattern Patches</span>?</p>
                          <form onSubmit={handleCentralSubmit}>
                              <input 
                                  type="number" 
                                  autoFocus
                                  value={centralInputValue}
                                  onChange={e => setCentralInputValue(e.target.value)}
-                                 className="w-full text-center text-4xl p-4 bg-white/10 border-2 border-white/30 rounded-xl focus:border-cyan-400 outline-none mb-6 font-bold text-white placeholder-white/30"
+                                 className="w-full text-center text-4xl p-4 bg-white/40 border-2 border-white/50 rounded-xl focus:border-cyan-400 outline-none mb-6 font-bold text-slate-800 placeholder-slate-500 shadow-inner"
                                  placeholder="#"
                              />
-                             <button type="submit" className="w-full bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-400 hover:to-teal-400 text-white font-bold py-4 rounded-xl transition text-xl shadow-lg">
+                             <button type="submit" className="w-full bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-400 hover:to-teal-400 text-white font-bold py-4 rounded-xl transition text-xl shadow-lg border border-white/20">
                                  Submit
                              </button>
                          </form>
@@ -683,7 +750,7 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage }) => {
                 </div>
             )}
 
-            {/* Feedback Overlay (Correct/Incorrect) */}
+            {/* Feedback Overlay */}
             {gameState === 'feedback' && feedbackData && (
                  <div className="absolute inset-0 z-40 bg-slate-900/60 backdrop-blur-md flex items-center justify-center">
                     <div className="bg-white/20 backdrop-blur-md border border-white/20 p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center animate-fade-in-up">

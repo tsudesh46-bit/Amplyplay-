@@ -4,6 +4,7 @@ import { Page, CompletedLevels } from './types';
 import HomePage from './components/HomePage';
 import SideMenu from './components/SideMenu';
 import PerformancePage from './components/PerformancePage';
+import ProfilePage from './components/ProfilePage';
 import Level1 from './components/levels/Level1';
 import Level2 from './components/levels/Level2';
 import Level3 from './components/levels/Level3';
@@ -40,6 +41,8 @@ const App: React.FC = () => {
         return <HomePage setCurrentPage={setCurrentPage} setIsSideMenuOpen={setIsSideMenuOpen} isSideMenuOpen={isSideMenuOpen} completedLevels={completedLevels} />;
       case 'performance':
         return <PerformancePage setCurrentPage={setCurrentPage} completedLevels={completedLevels} />;
+      case 'profile':
+        return <ProfilePage setCurrentPage={setCurrentPage} />;
       case 'level1':
         return <Level1 {...levelProps} />;
       case 'level2':

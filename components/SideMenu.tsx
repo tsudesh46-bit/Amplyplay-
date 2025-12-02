@@ -2,7 +2,7 @@
 import React from 'react';
 import { Page, CompletedLevels } from '../types';
 import { TOTAL_LEVELS } from '../constants';
-import { CloseIcon, StarIcon } from './ui/Icons';
+import { CloseIcon, StarIcon, UserIcon } from './ui/Icons';
 
 interface SideMenuProps {
   isOpen: boolean;
@@ -45,6 +45,12 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose, setCurrentPage, co
             <li>
                 <button onClick={() => navigateTo('home')} className="flex items-center w-full text-left text-lg font-semibold text-slate-300 hover:text-cyan-400 transition duration-200">
                     Home
+                </button>
+            </li>
+            <li>
+                <button onClick={() => navigateTo('profile')} className="flex items-center gap-2 w-full text-left text-lg font-semibold text-slate-300 hover:text-cyan-400 transition duration-200">
+                    <UserIcon className="w-5 h-5"/>
+                    Profile
                 </button>
             </li>
             {levels.map((level) => {
