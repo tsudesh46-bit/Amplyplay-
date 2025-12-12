@@ -5,19 +5,22 @@ import { RetryIcon, HomeIcon, NextIcon, StarIcon } from '../ui/Icons';
 import ConfirmationModal from '../ConfirmationModal';
 
 // --- Constants ---
-// Restored speed to 2000ms (Slow)
-const MIN_SPEED = 2000; 
+// Speed set to 150ms for smooth movement on fine grid
+const MIN_SPEED = 150; 
 
 const BORDER_THICKNESS = 4;
-// Restored Grid Size to 150px
-const GRID_CELL_SIZE = 150; 
+// Fine grid size (25px) - This ensures the growth is "very small"
+const GRID_CELL_SIZE = 25; 
+const VISUAL_GRID_SIZE = 150; // Visual background grid remains large
 
-// Configuration for each Acuity Milestone (Treating them as separate levels)
+// Configuration for each Acuity Milestone
+// 2cm radius = 4cm diameter.
+// 4cm = 40mm. At 96 DPI, 1mm = 3.78px. 40mm ~= 151px.
 const ACUITY_CONFIG = [
     { 
         id: 0, 
         label: '6/60', 
-        startSize: 150, endSize: 130, 
+        startSize: 151, endSize: 130, 
         startContrast: 1.0, endContrast: 0.85 
     },
     { 
@@ -72,7 +75,7 @@ const RingHomeButton: React.FC<{ onClick: () => void, className?: string }> = ({
 interface Distractor {
     x: number;
     y: number;
-    shape: 'circle' | 'square';
+    shape: 'circle'; // Enforced circle
     color: string;
     id: string;
 }
@@ -80,7 +83,7 @@ interface Distractor {
 interface Target {
     x: number;
     y: number;
-    shape: 'circle' | 'square';
+    shape: 'circle'; // Enforced circle
 }
 
 interface SnakeGameProps {
@@ -109,8 +112,8 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
     const [isExitModalOpen, setIsExitModalOpen] = useState(false);
     
     // Logic State
-    const [snake, setSnake] = useState<{x: number, y: number}[]>([{ x: 5, y: 5 }]);
-    const [target, setTarget] = useState<Target>({ x: 2, y: 2, shape: 'circle' });
+    const [snake, setSnake] = useState<{x: number, y: number}[]>([{ x: 10, y: 10 }]);
+    const [target, setTarget] = useState<Target>({ x: 5, y: 5, shape: 'circle' });
     const [distractors, setDistractors] = useState<Distractor[]>([]);
     
     const [direction, setDirection] = useState<'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | null>(null);
@@ -119,11 +122,11 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
     const intervalRef = useRef<any>(null);
 
     // Animation Refs
-    const prevSnakeRef = useRef<{x: number, y: number}[]>([{ x: 5, y: 5 }]);
+    const prevSnakeRef = useRef<{x: number, y: number}[]>([{ x: 10, y: 10 }]);
     const lastMoveTimeRef = useRef<number>(0);
     const isEatingRef = useRef<boolean>(false);
     
-    // Use the slow speed constantly
+    // Speed
     const speedRef = useRef<number>(MIN_SPEED);
 
     const [score, setScore] = useState(0);
@@ -148,29 +151,33 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
         directionRef.current = null;
         nextDirectionRef.current = null;
         setScore(0);
-        // Speed is constant slow speed
         speedRef.current = MIN_SPEED;
     }, [levelIndex]);
 
-    const targetScore = 100; // Fixed target score for all sub-levels
+    const targetScore = 100;
 
-    // Dynamic Visual Calculations based on Score (0 to 100) using specific Level Config
+    // Dynamic Visual Calculations
     const progressRatio = Math.min(1, score / 100);
-    
-    // Guard against config being undefined if transition happens before unmount
     const currentPatchSize = config ? config.startSize - (progressRatio * (config.startSize - config.endSize)) : 100;
     const currentContrast = config ? config.startContrast - (progressRatio * (config.startContrast - config.endContrast)) : 1.0;
 
     const generateLevelItems = useCallback((currentSnake: {x: number, y: number}[], cols: number, rows: number, currentScore: number) => {
         const occupied = new Set<string>();
-        currentSnake.forEach(s => occupied.add(`${s.x},${s.y}`));
+        // Add larger buffer for fine grid collision prevention on spawn
+        currentSnake.forEach(s => {
+            for(let dx=-3; dx<=3; dx++) {
+                for(let dy=-3; dy<=3; dy++) {
+                    occupied.add(`${s.x+dx},${s.y+dy}`);
+                }
+            }
+        });
 
         const getRandomPos = () => {
             let x, y, key;
             let attempts = 0;
             do {
-                x = Math.floor(Math.random() * cols);
-                y = Math.floor(Math.random() * rows);
+                x = Math.floor(Math.random() * (cols - 6)) + 3;
+                y = Math.floor(Math.random() * (rows - 6)) + 3;
                 key = `${x},${y}`;
                 attempts++;
             } while (occupied.has(key) && attempts < 200);
@@ -182,7 +189,7 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
         const newTargetPos = getRandomPos();
         const newTarget: Target = {
             ...newTargetPos,
-            shape: Math.random() > 0.5 ? 'circle' : 'square'
+            shape: 'circle' // Enforced circle
         };
         
         const numDistractors = 1; 
@@ -193,7 +200,7 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
             newDistractors.push({
                 x: pos.x,
                 y: pos.y,
-                shape: Math.random() > 0.5 ? 'circle' : 'square',
+                shape: 'circle', // Enforced circle
                 color: '#374151', 
                 id: `d-${Date.now()}-${i}`
             });
@@ -265,13 +272,24 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
                 case 'RIGHT': next.x += 1; break;
             }
             
-            // Check collisions
+            // Check collisions with Distractors (Immediate Game Over)
+            // UPDATED: Uses distance check (eating range) instead of exact cell match
+            // This ensures if you try to "eat" the fake patch, you die.
+            const hitDistractor = distractors.some(d => {
+                const dist = Math.sqrt(Math.pow(next.x - d.x, 2) + Math.pow(next.y - d.y, 2));
+                return dist < 2.5; 
+            });
+
+            if (hitDistractor) {
+                setGameState('gameOver');
+                if (score > highScore) setHighScore(score);
+                return prevSnake;
+            }
+
+            // Check collisions with Walls or Self
             if (next.x < 0 || next.x >= gridCols || next.y < 0 || next.y >= gridRows || 
-                prevSnake.some(s => s.x === next.x && s.y === next.y) ||
-                distractors.some(d => d.x === next.x && d.y === next.y)) {
+                prevSnake.some(s => s.x === next.x && s.y === next.y)) {
                 
-                // NEW: Star Logic on Game Over
-                // If score >= 30, we consider it a pass with stars
                 if (score >= 30) {
                      setGameState('levelComplete');
                      onComplete(score);
@@ -284,20 +302,24 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
             }
 
             // Check food
-            if (next.x === target.x && next.y === target.y) {
+            const hitDist = Math.sqrt(Math.pow(next.x - target.x, 2) + Math.pow(next.y - target.y, 2));
+            // Tolerance based on ratio of patch size to grid size, approx 2 cells
+            if (hitDist < 2.5) {
                 isEatingRef.current = true;
                 const newScore = score + 1;
                 setScore(newScore);
                 
-                // Progression Condition: Reach 100 for THIS sub-level
                 if (newScore >= 100) {
                     setGameState('levelComplete');
-                    onComplete(newScore); // Trigger unlock logic in parent
+                    onComplete(newScore); 
                     return [next, ...prevSnake];
                 }
 
-                // Growth Logic: Only grow every 5 points to keep snake manageable (Restored)
-                const shouldGrow = newScore % 5 === 0;
+                // Growth Logic:
+                // shouldGrow = true means we DO NOT remove the tail.
+                // This increases the length by exactly 1 grid cell (25px).
+                // This creates the "very small amount" growth effect.
+                const shouldGrow = true;
 
                 const newSnakeHead = [next, ...prevSnake]; 
                 const newSnake = shouldGrow ? newSnakeHead : newSnakeHead.slice(0, -1);
@@ -308,6 +330,7 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
                 return newSnake;
             } else {
                 isEatingRef.current = false;
+                // Move: Remove tail, add head. Length stays same.
                 return [next, ...prevSnake.slice(0, -1)];
             }
         });
@@ -337,7 +360,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
     const processInputDirection = useCallback((newDir: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT') => {
         const current = directionRef.current;
         
-        // If game is just starting, we set it immediately so next tick picks it up
         if (!current) {
             directionRef.current = newDir; 
             setDirection(newDir);
@@ -350,30 +372,10 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
         if (current === 'DOWN' && newDir === 'UP') return;
         if (current === newDir) return;
 
-        // Queue for next tick
         nextDirectionRef.current = newDir;
     }, []);
 
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
-            
-            if (gameState !== 'playing' || isPaused || isExitModalOpen) return;
-            
-            const key = e.key;
-            let newDir: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | null = null;
-            
-            switch (key) {
-                case 'ArrowUp': newDir = 'UP'; break;
-                case 'ArrowDown': newDir = 'DOWN'; break;
-                case 'ArrowLeft': newDir = 'LEFT'; break;
-                case 'ArrowRight': newDir = 'RIGHT'; break;
-            }
-            if (newDir) processInputDirection(newDir);
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [gameState, isPaused, isExitModalOpen, processInputDirection]); 
+    // NOTE: Keyboard event listener intentionally removed for Level 6 (Click/Tap Only)
 
     const handleInput = useCallback((clientX: number, clientY: number) => {
         if (gameState !== 'playing' || isPaused || isExitModalOpen) return;
@@ -467,7 +469,7 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
                  visualPoints = [visualPoints[0], visualPoints[0]]; 
             }
 
-            // Update: Dynamic Snake Width based on Level Acuity Size
+            // Visual width based on Gabor patch size
             const snakeWidth = currentPatchSize; 
 
             const stepSize = 1; 
@@ -505,9 +507,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
                     const contrastFrequency = 0.02;
                     const rawEnvelope = (Math.sin(totalDist * contrastFrequency) + 1) / 2;
                     const contrast = 0.1 + 0.9 * rawEnvelope;
-                    // Note: In previous version effectiveContrast used totalDist < GRID_CELL_SIZE * 2
-                    // We remove that head-check logic to apply pure contrast sensitivity, 
-                    // or we apply currentContrast globally.
                     
                     const baseLightness = Math.max(20, 98 - (normalizedPos * 78));
                     const gaborMod = gratingValue * 25;
@@ -516,11 +515,10 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
                     ctx.arc(x * GRID_CELL_SIZE + GRID_CELL_SIZE/2, y * GRID_CELL_SIZE + GRID_CELL_SIZE/2, snakeWidth/2, 0, Math.PI * 2);
                     ctx.fillStyle = `hsl(0, 0%, ${baseLightness + gaborMod}%)`;
                     
-                    // Update: Dynamic Contrast Opacity
                     ctx.globalAlpha = Math.max(0.2, currentContrast);
                     
                     ctx.fill();
-                    ctx.globalAlpha = 1.0; // Reset
+                    ctx.globalAlpha = 1.0; 
                 }
                 currentDistanceTraveled += pixelDist;
             }
@@ -558,7 +556,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
                  ctx.shadowColor = "rgba(255, 255, 255, 0.6)";
                  ctx.shadowBlur = 12;
                  
-                 // Update: Head Contrast
                  ctx.globalAlpha = Math.max(0.4, currentContrast);
                  
                  ctx.fill();
@@ -612,6 +609,11 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
         boxShadow: '0 0 8px rgba(0, 0, 0, 0.5)',
         width: `${currentPatchSize}px`,
         height: `${currentPatchSize}px`,
+        // Fix for potential flexbox squashing to ensure perfect circle
+        minWidth: `${currentPatchSize}px`,
+        minHeight: `${currentPatchSize}px`,
+        flexShrink: 0,
+        borderRadius: '50%',
         transition: 'width 0.2s ease, height 0.2s ease'
     };
     
@@ -621,6 +623,11 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
         backgroundSize: '100% 100%',
         width: `${currentPatchSize}px`,
         height: `${currentPatchSize}px`,
+        // Fix for potential flexbox squashing to ensure perfect circle
+        minWidth: `${currentPatchSize}px`,
+        minHeight: `${currentPatchSize}px`,
+        flexShrink: 0,
+        borderRadius: '50%',
         transition: 'width 0.2s ease, height 0.2s ease'
     };
     
@@ -658,10 +665,11 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
                             <div className="flex flex-col items-center gap-3">
                                 <div 
                                     style={{
-                                        borderRadius: '50%',
                                         ...foodGaborStyle,
                                         width: '60px',
                                         height: '60px',
+                                        minWidth: '60px',
+                                        minHeight: '60px',
                                         boxShadow: '0 0 20px rgba(255,255,255,0.4)'
                                     }}
                                 ></div>
@@ -673,10 +681,11 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
                             <div className="flex flex-col items-center gap-3">
                                 <div 
                                     style={{
-                                        borderRadius: '50%',
                                         ...distractorGaborStyle,
                                         width: '60px',
-                                        height: '60px'
+                                        height: '60px',
+                                        minWidth: '60px',
+                                        minHeight: '60px'
                                     }}
                                 ></div>
                                 <span className="text-slate-400 font-bold text-sm tracking-widest uppercase drop-shadow-md">AVOID</span>
@@ -833,12 +842,13 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
                 <div ref={gameContainerRef} className="w-full h-full flex items-center justify-center relative bg-black">
                     <div className="relative overflow-hidden pointer-events-auto bg-black" style={{ width: `${gridCols * GRID_CELL_SIZE}px`, height: `${gridRows * GRID_CELL_SIZE}px`, border: `${BORDER_THICKNESS}px solid #475569`, boxShadow: '0 0 30px rgba(6,182,212,0.1)' }}>
                         {renderOverlay()}
-                        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: `linear-gradient(#334155 1px, transparent 1px), linear-gradient(90deg, #334155 1px, transparent 1px)`, backgroundSize: `${GRID_CELL_SIZE}px ${GRID_CELL_SIZE}px` }}></div>
+                        {/* Background Grid: Uses fixed 150px visual square to maintain look, while movement is 30px */}
+                        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: `linear-gradient(#334155 1px, transparent 1px), linear-gradient(90deg, #334155 1px, transparent 1px)`, backgroundSize: `${VISUAL_GRID_SIZE}px ${VISUAL_GRID_SIZE}px` }}></div>
 
                         {gameState === 'playing' && direction === null && (
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
                                 <div className="bg-black/50 text-cyan-400 px-6 py-3 rounded-full animate-pulse backdrop-blur-sm border border-cyan-500/30 text-lg font-bold shadow-[0_0_20px_rgba(34,211,238,0.3)]">
-                                    Tap or Press Arrow Key to Start
+                                    Tap to Start
                                 </div>
                             </div>
                         )}
@@ -862,7 +872,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
                                     >
                                         {/* Inner Scaled Gabor Patch */}
                                         <div style={{
-                                             borderRadius: target.shape === 'circle' ? '50%' : '0%',
                                              ...foodGaborStyle,
                                              boxShadow: '0 0 15px rgba(255,255,255,0.6)'
                                         }} />
@@ -884,7 +893,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({
                                             }} 
                                          >
                                             <div style={{
-                                                borderRadius: d.shape === 'circle' ? '50%' : '0%',
                                                 ...distractorGaborStyle
                                             }} />
                                          </div>
