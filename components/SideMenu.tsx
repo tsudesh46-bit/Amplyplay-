@@ -2,7 +2,7 @@
 import React from 'react';
 import { Page, CompletedLevels } from '../types';
 import { TOTAL_LEVELS } from '../constants';
-import { CloseIcon, StarIcon, UserIcon } from './ui/Icons';
+import { CloseIcon, StarIcon, UserIcon, PlayIcon } from './ui/Icons';
 
 interface SideMenuProps {
   isOpen: boolean;
@@ -51,6 +51,15 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose, setCurrentPage, co
                 <button onClick={() => navigateTo('profile')} className="flex items-center gap-2 w-full text-left text-lg font-semibold text-slate-300 hover:text-cyan-400 transition duration-200">
                     <UserIcon className="w-5 h-5"/>
                     Profile
+                </button>
+            </li>
+            <li>
+                <button 
+                  onClick={() => navigateTo('strabplay_home')}
+                  className="flex items-center gap-2 w-full text-left text-lg font-semibold text-slate-300 hover:text-cyan-400 transition duration-200"
+                >
+                    <PlayIcon className="w-5 h-5"/>
+                    Strabplay
                 </button>
             </li>
             {levels.map((level) => {

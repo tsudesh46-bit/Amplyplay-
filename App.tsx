@@ -5,20 +5,19 @@ import HomePage from './components/HomePage';
 import SideMenu from './components/SideMenu';
 import PerformancePage from './components/PerformancePage';
 import ProfilePage from './components/ProfilePage';
+import StrabplayHome from './components/StrabplayHome';
 import Level1 from './components/levels/Level1';
 import Level2 from './components/levels/Level2';
 import Level3 from './components/levels/Level3';
 import Level4 from './components/levels/Level4';
 import Level5 from './components/levels/Level5';
 import Level6 from './components/levels/Level6';
-import LevelPlaceholder from './components/levels/LevelPlaceholder';
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [isSideMenuOpen, setIsSideMenuOpen] = useState(false);
   const [completedLevels, setCompletedLevels] = useState<CompletedLevels>({});
 
-  // Since localStorage isn't available, we start with empty progress.
   useEffect(() => {
     setCompletedLevels({});
   }, []);
@@ -39,6 +38,8 @@ const App: React.FC = () => {
     switch (currentPage) {
       case 'home':
         return <HomePage setCurrentPage={setCurrentPage} setIsSideMenuOpen={setIsSideMenuOpen} isSideMenuOpen={isSideMenuOpen} completedLevels={completedLevels} />;
+      case 'strabplay_home':
+        return <StrabplayHome setCurrentPage={setCurrentPage} completedLevels={completedLevels} />;
       case 'performance':
         return <PerformancePage setCurrentPage={setCurrentPage} completedLevels={completedLevels} />;
       case 'profile':

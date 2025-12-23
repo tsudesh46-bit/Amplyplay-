@@ -3,6 +3,7 @@ export type Page =
   | 'home' 
   | 'performance' 
   | 'profile'
+  | 'strabplay_home'
   | 'level1' 
   | 'level2' 
   | 'level3' 
