@@ -1,5 +1,6 @@
 
 export type Page = 
+  | 'login'
   | 'home' 
   | 'performance' 
   | 'profile'
@@ -9,7 +10,16 @@ export type Page =
   | 'level3' 
   | 'level4' 
   | 'level5' 
-  | 'level6';
+  | 'level6'
+  | 'strab_level1'
+  | 'strab_level2'
+  | 'strab_level3'
+  | 'strab_level4'
+  | 'strab_level5'
+  | 'strab_level6'
+  | 'strab_level7'
+  | 'strab_level8'
+  | 'strab_level9';
 
 export interface CompletedLevels {
   [levelId: string]: number;

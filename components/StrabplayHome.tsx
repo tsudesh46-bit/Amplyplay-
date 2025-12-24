@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Page, CompletedLevels } from '../types';
-import { LogoIcon, MenuIcon, PlayIcon, StarIcon } from './ui/Icons';
+import { LogoIcon, MenuIcon, PlayIcon, StarIcon, HomeIcon } from './ui/Icons';
 
 interface StrabplayHomeProps {
   setCurrentPage: (page: Page) => void;
@@ -11,24 +11,32 @@ interface StrabplayHomeProps {
 const StrabplayHome: React.FC<StrabplayHomeProps> = ({ setCurrentPage, completedLevels }) => {
   const categories = [
     {
-      title: "Common",
+      title: "Motor Exercise",
       levels: [
-        { id: 1, name: "Level 01", sub: "Basic Fusion" },
-        { id: 2, name: "Level 02", sub: "Contrast Sensitivity" }
+        { id: 1, name: "Level 01", sub: "Basic Oculomotor", page: 'strab_level1' as Page },
+        { id: 2, name: "Level 02", sub: "Smooth Pursuits", page: 'strab_level2' as Page },
+        { id: 3, name: "Level 03", sub: "Saccades Exercise", page: 'strab_level3' as Page }
       ]
     },
     {
-      title: "For Children",
+      title: "Accomodation",
       levels: [
-        { id: 3, name: "Level 03", sub: "Tracking Objects" },
-        { id: 4, name: "Level 04", sub: "Saccadic Movements" }
+        { id: 4, name: "Level 04", sub: "Flexibility", page: 'strab_level4' as Page },
+        { id: 5, name: "Level 05", sub: "Amplitude", page: 'strab_level5' as Page }
+      ]
+    },
+    {
+      title: "Fusion",
+      levels: [
+        { id: 6, name: "Level 06", sub: "Flat Fusion", page: 'strab_level6' as Page },
+        { id: 7, name: "Level 07", sub: "Stereopsis", page: 'strab_level7' as Page }
       ]
     },
     {
       title: "Games",
       levels: [
-        { id: 5, name: "Level 05", sub: "Reaction Time" },
-        { id: 6, name: "Level 06", sub: "Gabor Snake (Strabismus)" }
+        { id: 8, name: "Level 08", sub: "Space Challenge", page: 'strab_level8' as Page },
+        { id: 9, name: "Level 09", sub: "Color Match", page: 'strab_level9' as Page }
       ]
     }
   ];
@@ -45,8 +53,15 @@ const StrabplayHome: React.FC<StrabplayHomeProps> = ({ setCurrentPage, completed
         </div>
         
         <nav className="mt-8 flex-grow px-4 space-y-2">
-          <button className="flex items-center gap-3 w-full p-3 rounded-lg bg-[#00a8e8] text-white font-medium transition-colors">
+          <button 
+            onClick={() => setCurrentPage('home')}
+            className="flex items-center gap-3 w-full p-3 rounded-lg text-slate-400 hover:bg-white/5 transition-colors"
+          >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+            Amblyoplay
+          </button>
+          <button className="flex items-center gap-3 w-full p-3 rounded-lg bg-[#00a8e8] text-white font-medium transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
             Dashboard
           </button>
           <button onClick={() => setCurrentPage('performance')} className="flex items-center gap-3 w-full p-3 rounded-lg text-slate-400 hover:bg-white/5 transition-colors">
@@ -124,11 +139,11 @@ const StrabplayHome: React.FC<StrabplayHomeProps> = ({ setCurrentPage, completed
                 
                 <div className="space-y-4">
                   {cat.levels.map((level) => {
-                    const stars = completedLevels[`level${level.id}`] || 0;
+                    const stars = completedLevels[`strab_level${level.id}`] || 0;
                     return (
                       <button 
                         key={level.id}
-                        onClick={() => setCurrentPage(`level${level.id}` as Page)}
+                        onClick={() => setCurrentPage(level.page)}
                         className="w-full bg-white p-5 rounded-2xl border-2 border-slate-100 flex items-center justify-between group hover:border-cyan-400 transition-all hover:shadow-lg hover:shadow-cyan-500/5 text-left relative overflow-hidden"
                       >
                          <div className="absolute left-0 top-0 w-1 h-full bg-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
@@ -155,7 +170,6 @@ const StrabplayHome: React.FC<StrabplayHomeProps> = ({ setCurrentPage, completed
               </section>
             ))}
 
-            {/* Performance Sidebar Item (Screenshot has it at the bottom right) */}
             <div className="flex flex-col justify-end pt-10">
                <button 
                 onClick={() => setCurrentPage('performance')}
