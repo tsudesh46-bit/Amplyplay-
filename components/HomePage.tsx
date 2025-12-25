@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Page, CompletedLevels } from '../types';
+import { Page, CompletedLevels, UserProfile } from '../types';
 import { MenuIcon, StarIcon, LogoIcon, PlayIcon, UserIcon, HomeIcon, SettingsIcon } from './ui/Icons';
 
 interface HomePageProps {
@@ -8,6 +8,9 @@ interface HomePageProps {
   setIsSideMenuOpen: (isOpen: boolean) => void;
   isSideMenuOpen: boolean;
   completedLevels: CompletedLevels;
+  onLogout: () => void;
+  isDemoMode?: boolean;
+  userProfile?: UserProfile;
 }
 
 const StrabismusIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" }) => (
@@ -18,27 +21,40 @@ const StrabismusIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5
   </svg>
 );
 
-const LevelButton: React.FC<{level: number, setCurrentPage: (page: Page) => void, stars: number}> = ({ level, setCurrentPage, stars }) => {
+const LevelButton: React.FC<{level: number, setCurrentPage: (page: Page) => void, stars: number, isDemoMode?: boolean}> = ({ level, setCurrentPage, stars, isDemoMode }) => {
     const starColor = stars === 3 ? "text-red-500" : "text-yellow-400";
+    const isLocked = isDemoMode && level > 1;
 
     return (
         <button
-            onClick={() => setCurrentPage(`level${level}` as Page)}
-            className="group w-full bg-gradient-to-br from-white to-cyan-50 p-6 rounded-2xl text-slate-700 text-xl font-bold transition-all duration-300 ease-in-out transform hover:-translate-y-1 border border-cyan-100 shadow-sm hover:shadow-xl hover:shadow-cyan-500/10 hover:border-cyan-300 flex justify-between items-center"
+            onClick={() => !isLocked && setCurrentPage(`level${level}` as Page)}
+            disabled={isLocked}
+            className={`group w-full bg-gradient-to-br ${isLocked ? 'from-slate-100 to-slate-200 cursor-not-allowed grayscale' : 'from-white to-cyan-50'} p-6 rounded-2xl text-slate-700 text-xl font-bold transition-all duration-300 ease-in-out transform ${!isLocked && 'hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 hover:border-cyan-300'} border border-cyan-100 shadow-sm flex justify-between items-center`}
         >
-            <span>Level {String(level).padStart(2, '0')}</span>
-            {stars > 0 && (
-                <div className="flex gap-1.5">
-                    {Array.from({ length: stars }).map((_, i) => (
-                        <StarIcon key={i} className={`w-7 h-7 ${starColor}`}/>
-                    ))}
-                </div>
+            <div className="flex items-center gap-3">
+              {isLocked && (
+                <svg className="w-5 h-5 text-slate-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                </svg>
+              )}
+              <span>Level {String(level).padStart(2, '0')}</span>
+            </div>
+            {isLocked ? (
+              <span className="text-[10px] bg-slate-200 text-slate-500 px-2 py-1 rounded uppercase tracking-widest font-black">Locked in Demo</span>
+            ) : (
+              stars > 0 && (
+                  <div className="flex gap-1.5">
+                      {Array.from({ length: stars }).map((_, i) => (
+                          <StarIcon key={i} className={`w-7 h-7 ${starColor}`}/>
+                      ))}
+                  </div>
+              )
             )}
         </button>
     );
 };
 
-const HomePage: React.FC<HomePageProps> = ({ setCurrentPage, setIsSideMenuOpen, isSideMenuOpen, completedLevels }) => {
+const HomePage: React.FC<HomePageProps> = ({ setCurrentPage, setIsSideMenuOpen, isSideMenuOpen, completedLevels, onLogout, isDemoMode, userProfile }) => {
   const levelCategories = {
     "Common": [1, 2],
     "For Children": [3, 4],
@@ -48,9 +64,11 @@ const HomePage: React.FC<HomePageProps> = ({ setCurrentPage, setIsSideMenuOpen, 
   const navItems = [
     { label: 'Amblyoplay', page: 'home' as Page, icon: <HomeIcon className="w-6 h-6" /> },
     { label: 'Strabplay', page: 'strabplay_home' as Page, icon: <PlayIcon className="w-6 h-6" /> },
-    { label: 'Profile', page: 'profile' as Page, icon: <UserIcon className="w-6 h-6" /> },
+    { label: 'Profile', page: 'profile' as Page, icon: <UserIcon className="w-6 h-6 text-cyan-500" /> },
     { label: 'Performance', page: 'performance' as Page, icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg> },
   ];
+
+  const displayName = userProfile?.name || 'Amblyo Patient';
 
   return (
     <div className="relative min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 sm:p-6 md:p-8">
@@ -116,20 +134,20 @@ const HomePage: React.FC<HomePageProps> = ({ setCurrentPage, setIsSideMenuOpen, 
           <div className="flex items-center gap-8">
              <div className="hidden sm:block text-right">
                 <div className="flex items-center justify-end gap-3 mb-1">
-                   <div className="text-lg font-black text-slate-800">Amblyo Patient</div>
+                   <div className="text-lg font-black text-slate-800">{displayName}</div>
                 </div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Daily Progress: 85% Complete</div>
              </div>
              
              <div className="relative group cursor-pointer" onClick={() => setCurrentPage('profile')}>
                <div className="w-14 h-14 rounded-[1.25rem] bg-gradient-to-br from-cyan-500 to-teal-400 flex items-center justify-center text-white font-black text-3xl shadow-xl shadow-cyan-500/20 transform group-hover:rotate-6 transition-transform">
-                  A
+                  {displayName.charAt(0)}
                </div>
                <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 border-4 border-white rounded-full"></div>
              </div>
 
              <button 
-               onClick={() => setCurrentPage('home')}
+               onClick={onLogout}
                className="p-4 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-[1.25rem] transition-all"
                title="Logout"
              >
@@ -175,6 +193,7 @@ const HomePage: React.FC<HomePageProps> = ({ setCurrentPage, setIsSideMenuOpen, 
                               level={level}
                               setCurrentPage={setCurrentPage}
                               stars={completedLevels[`level${level}`] || 0}
+                              isDemoMode={isDemoMode}
                           />
                       ))}
                   </div>
@@ -193,7 +212,7 @@ const HomePage: React.FC<HomePageProps> = ({ setCurrentPage, setIsSideMenuOpen, 
                   onClick={() => setCurrentPage('profile')}
                   className="group bg-white border-2 border-slate-200 text-slate-700 p-8 rounded-[2rem] font-black text-2xl transition-all duration-300 hover:border-cyan-400 hover:text-cyan-600 flex justify-center items-center gap-5"
               >
-                  <UserIcon className="w-8 h-8" />
+                  <UserIcon className="w-8 h-8 text-cyan-500" />
                   <span>PROFILE</span>
               </button>
           </div>

@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Page } from '../../types';
-import { NextIcon, RetryIcon, HomeIcon } from '../ui/Icons'; // Added HomeIcon import
+import { Page, LevelStats } from '../../types';
+import { NextIcon, RetryIcon, HomeIcon } from '../ui/Icons';
 import ConfirmationModal from '../ConfirmationModal';
 
-// Helper for Gabor style, replacing GaborText component for this level
+// Helper for Gabor style
 const getDynamicGaborStyle = (isCorrect: boolean, contrast: number, fontSize: number): React.CSSProperties => {
     const baseColorValue = 0; // Black
     const textColor = `rgba(${baseColorValue}, ${baseColorValue}, ${baseColorValue}, ${contrast})`;
@@ -35,25 +35,20 @@ const getDynamicGaborStyle = (isCorrect: boolean, contrast: number, fontSize: nu
     return baseStyle;
 };
 
-// Local HomeButton component for this level
 const HomeButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
     <button
         onClick={onClick}
         className="absolute bottom-4 right-4 group w-14 h-14 rounded-full flex items-center justify-center bg-white shadow-xl transition-transform hover:scale-110 focus:outline-none z-30"
         aria-label="Home"
     >
-         {/* Inner Ring */}
         <span className="absolute inset-0 rounded-full border-2 border-cyan-200 opacity-70 group-hover:border-cyan-500 group-hover:opacity-100 transition-all duration-300"></span>
-        {/* Outer Pulse Ring */}
         <span className="absolute -inset-1 rounded-full border border-cyan-100 opacity-40 group-hover:scale-110 group-hover:opacity-60 transition-all duration-500 ease-out"></span>
-        
         <HomeIcon className="w-8 h-8 text-cyan-600 group-hover:text-cyan-700 transition-colors" />
     </button>
 );
 
 const text3DStyle = { textShadow: '2px 2px 4px rgba(0,0,0,0.2)' };
 
-// Fireworks Reward Component
 const FireworksReward: React.FC<{ show: boolean }> = ({ show }) => {
   if (!show) return null;
   const particles = Array.from({ length: 40 });
@@ -82,13 +77,9 @@ const FireworksReward: React.FC<{ show: boolean }> = ({ show }) => {
   );
 };
 
-// Local LevelComponent, replacing LevelLayout for this level
 const LevelComponent: React.FC<{ levelId: number, children: React.ReactNode, onHomeClick: () => void }> = ({ levelId, children, onHomeClick }) => (
     <div className="relative min-h-screen bg-white flex flex-col items-center p-4 overflow-hidden">
-        <h2
-            className="text-4xl font-bold text-slate-700 mb-4 mt-4"
-            style={text3DStyle}
-        >
+        <h2 className="text-4xl font-bold text-slate-700 mb-4 mt-4" style={text3DStyle}>
             Level {String(levelId).padStart(2, '0')}
         </h2>
         {children}
@@ -98,7 +89,7 @@ const LevelComponent: React.FC<{ levelId: number, children: React.ReactNode, onH
 
 interface Level2Props {
   setCurrentPage: (page: Page) => void;
-  saveLevelCompletion: (levelId: string, stars: number) => void;
+  saveLevelCompletion: (levelId: string, stars: number, details?: Partial<LevelStats>) => void;
 }
 
 const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) => {
@@ -180,15 +171,23 @@ const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) 
                 else if (percentage > 30) stars = 1;
             }
 
+            const stats = {
+              score: newCorrectCount,
+              incorrect: newIncorrectCount,
+              contrast: currentContrast,
+              size: currentFontSize,
+              category: 'amblyo' as const
+            };
+
             if (isSuccess) {
                 setAwardedStars(3);
                 setShowStarAnimation(true);
                 setTimeout(() => {
-                    saveLevelCompletion('level2', stars);
+                    saveLevelCompletion('level2', stars, stats);
                     setGameState('success');
                 }, 1500);
             } else {
-                saveLevelCompletion('level2', stars);
+                saveLevelCompletion('level2', stars, stats);
                 setGameState('fail');
             }
         } else {

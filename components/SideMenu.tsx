@@ -9,9 +9,10 @@ interface SideMenuProps {
   onClose: () => void;
   setCurrentPage: (page: Page) => void;
   completedLevels: CompletedLevels;
+  onLogout: () => void;
 }
 
-const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose, setCurrentPage, completedLevels }) => {
+const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose, setCurrentPage, completedLevels, onLogout }) => {
   const levels = Array.from({ length: TOTAL_LEVELS }, (_, i) => i + 1);
 
   const navigateTo = (page: Page) => {
@@ -71,7 +72,7 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose, setCurrentPage, co
               <li>
                   <button onClick={() => navigateTo('profile')} className="flex items-center gap-3 w-full p-3 rounded-xl text-slate-300 hover:bg-white/5 hover:text-white transition-all group">
                       <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center group-hover:bg-cyan-600 transition-colors">
-                        <UserIcon className="w-4 h-4"/>
+                        <UserIcon className="w-4 h-4 text-cyan-400"/>
                       </div>
                       <span className="font-semibold">Profile</span>
                   </button>
@@ -118,7 +119,7 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose, setCurrentPage, co
         </div>
 
         <div className="p-6 border-t border-slate-800">
-           <button onClick={() => navigateTo('home')} className="flex items-center gap-3 text-slate-500 hover:text-white transition-colors text-sm font-bold w-full uppercase tracking-widest">
+           <button onClick={onLogout} className="flex items-center gap-3 text-slate-500 hover:text-white transition-colors text-sm font-bold w-full uppercase tracking-widest">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
               Logout
            </button>

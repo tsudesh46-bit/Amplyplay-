@@ -6,9 +6,10 @@ import { LogoIcon, MenuIcon, PlayIcon, StarIcon, HomeIcon } from './ui/Icons';
 interface StrabplayHomeProps {
   setCurrentPage: (page: Page) => void;
   completedLevels: CompletedLevels;
+  isDemoMode?: boolean;
 }
 
-const StrabplayHome: React.FC<StrabplayHomeProps> = ({ setCurrentPage, completedLevels }) => {
+const StrabplayHome: React.FC<StrabplayHomeProps> = ({ setCurrentPage, completedLevels, isDemoMode }) => {
   const categories = [
     {
       title: "Motor Exercise",
@@ -140,27 +141,42 @@ const StrabplayHome: React.FC<StrabplayHomeProps> = ({ setCurrentPage, completed
                 <div className="space-y-4">
                   {cat.levels.map((level) => {
                     const stars = completedLevels[`strab_level${level.id}`] || 0;
+                    const isLocked = isDemoMode && level.id > 1;
                     return (
                       <button 
                         key={level.id}
-                        onClick={() => setCurrentPage(level.page)}
-                        className="w-full bg-white p-5 rounded-2xl border-2 border-slate-100 flex items-center justify-between group hover:border-cyan-400 transition-all hover:shadow-lg hover:shadow-cyan-500/5 text-left relative overflow-hidden"
+                        onClick={() => !isLocked && setCurrentPage(level.page)}
+                        disabled={isLocked}
+                        className={`w-full ${isLocked ? 'bg-slate-50 cursor-not-allowed grayscale' : 'bg-white hover:border-cyan-400 hover:shadow-lg hover:shadow-cyan-500/5'} p-5 rounded-2xl border-2 border-slate-100 flex items-center justify-between group transition-all text-left relative overflow-hidden`}
                       >
-                         <div className="absolute left-0 top-0 w-1 h-full bg-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                         <div className={`absolute left-0 top-0 w-1 h-full bg-cyan-400 ${!isLocked ? 'opacity-0 group-hover:opacity-100' : 'opacity-20'} transition-opacity`}></div>
                         <div>
-                          <div className="font-bold text-slate-800 text-lg">{level.name}</div>
-                          <div className="text-slate-400 text-sm font-medium">{level.sub}</div>
+                          <div className={`font-bold ${isLocked ? 'text-slate-400' : 'text-slate-800'} text-lg flex items-center gap-2`}>
+                            {isLocked && (
+                                <svg className="w-4 h-4 text-slate-300" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                                </svg>
+                            )}
+                            {level.name}
+                          </div>
+                          <div className="text-slate-400 text-sm font-medium">
+                            {isLocked ? 'Unlock in full version' : level.sub}
+                          </div>
                         </div>
                         <div className="flex items-center gap-4">
-                           {stars > 0 && (
+                           {stars > 0 && !isLocked && (
                             <div className="flex gap-0.5">
                               {Array.from({ length: stars }).map((_, i) => (
                                 <StarIcon key={i} className={`w-4 h-4 ${stars === 3 ? 'text-red-500' : 'text-yellow-400'}`} />
                               ))}
                             </div>
                           )}
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${level.id === 6 ? 'bg-cyan-500 text-white' : 'bg-slate-100 text-slate-400 group-hover:bg-cyan-50 group-hover:text-cyan-500'}`}>
-                            <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${level.id === 6 && !isLocked ? 'bg-cyan-500 text-white' : 'bg-slate-100 text-slate-400 group-hover:bg-cyan-50 group-hover:text-cyan-500'}`}>
+                            {isLocked ? (
+                                <span className="text-[8px] font-black uppercase text-slate-300">Lock</span>
+                            ) : (
+                                <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                            )}
                           </div>
                         </div>
                       </button>

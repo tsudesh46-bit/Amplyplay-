@@ -5,6 +5,7 @@ export type Page =
   | 'performance' 
   | 'profile'
   | 'strabplay_home'
+  | 'support'
   | 'level1' 
   | 'level2' 
   | 'level3' 
@@ -21,6 +22,30 @@ export type Page =
   | 'strab_level8'
   | 'strab_level9';
 
+export type Language = 'en' | 'si';
+
+export interface UserProfile {
+  name: string;
+  age: string;
+  condition: string;
+  joinedDate: string;
+}
+
+export interface LevelStats {
+  levelId: string;
+  stars: number;
+  score: number;
+  incorrect: number;
+  contrast?: number;
+  size?: number;
+  timestamp: number;
+  category: 'amblyo' | 'strab';
+}
+
 export interface CompletedLevels {
   [levelId: string]: number;
+}
+
+export interface GameHistory {
+  history: LevelStats[];
 }

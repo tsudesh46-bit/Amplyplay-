@@ -1,17 +1,30 @@
 
-import React, { useState } from 'react';
-import { Page } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Page, Language } from '../types';
 import { UserIcon, LogoIcon } from './ui/Icons';
+import { translations } from '../translations';
 
 interface LoginPageProps {
   setCurrentPage: (page: Page) => void;
   startDemoSession?: () => void;
+  language: Language;
+  setLanguage: (lang: Language) => void;
 }
 
-const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession }) => {
+const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession, language, setLanguage }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isDemoBlocked, setIsDemoBlocked] = useState(false);
+  
+  const t = translations[language];
+
+  useEffect(() => {
+    const used = localStorage.getItem('strabplay_demo_used');
+    if (used === 'true') {
+      setIsDemoBlocked(true);
+    }
+  }, []);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,6 +32,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession 
   };
 
   const handleDemoStart = () => {
+    if (isDemoBlocked) return;
     if (startDemoSession) {
       startDemoSession();
     }
@@ -32,26 +46,42 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession 
         <div className="flex items-center gap-6">
           <div className="text-white font-black text-xl tracking-tighter uppercase flex items-center gap-3">
             <div className="bg-cyan-500 text-[#0a1128] w-8 h-8 flex items-center justify-center rounded-lg text-lg">A</div>
-            <span>AMBLYOPLAY</span>
+            <span>{t.brand}</span>
           </div>
           <div className="h-8 w-px bg-white/20 hidden sm:block"></div>
           <div className="text-white/80 font-black text-xl tracking-tighter uppercase flex items-center gap-3 hidden sm:flex">
             <div className="bg-indigo-500 text-[#0a1128] w-8 h-8 flex items-center justify-center rounded-lg text-lg font-bold">S</div>
-            <span>STRABPLAY</span>
+            <span>{t.strabBrand}</span>
           </div>
         </div>
         <div className="flex items-center gap-6 text-slate-300 text-sm font-medium">
-          <button className="hover:text-white transition-colors">Support</button>
-          <div className="flex items-center gap-1 cursor-pointer hover:text-white transition-colors">
-            English
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
+          <button 
+            onClick={() => setCurrentPage('support')}
+            className="hover:text-white transition-colors"
+          >
+            {t.support}
+          </button>
+          <div className="flex items-center gap-3">
+             <button 
+                onClick={() => setLanguage('en')}
+                className={`transition-colors font-bold ${language === 'en' ? 'text-cyan-400' : 'text-slate-500 hover:text-white'}`}
+             >
+               EN
+             </button>
+             <div className="w-px h-4 bg-slate-700"></div>
+             <button 
+                onClick={() => setLanguage('si')}
+                className={`transition-colors font-bold ${language === 'si' ? 'text-cyan-400' : 'text-slate-500 hover:text-white'}`}
+             >
+               SI
+             </button>
           </div>
         </div>
       </nav>
 
       <div className="flex-grow flex flex-col items-center justify-center p-4 py-12">
-        <h2 className="text-[#0a1128] text-xl sm:text-3xl font-black uppercase tracking-[0.2em] mb-12 text-center drop-shadow-sm">
-          From Brain Science to Full Vision
+        <h2 className="text-[#0a1128] text-xl sm:text-3xl font-black uppercase tracking-[0.2em] mb-12 text-center drop-shadow-sm px-4">
+          {t.tagline}
         </h2>
 
         <div className="w-full max-w-lg space-y-8">
@@ -63,14 +93,14 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession 
               <div className="w-16 h-16 bg-cyan-100/50 rounded-2xl flex items-center justify-center text-cyan-600 mb-4 shadow-inner border border-cyan-100">
                 <UserIcon className="w-9 h-9" />
               </div>
-              <h1 className="text-3xl font-black text-[#0a1128] tracking-tight">User Login</h1>
+              <h1 className="text-3xl font-black text-[#0a1128] tracking-tight">{t.login}</h1>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-5 relative z-10">
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Username"
+                  placeholder={t.username}
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full p-5 bg-[#f3f7fb] rounded-2xl text-[#0a1128] border-2 border-transparent focus:border-cyan-400 outline-none transition-all placeholder:text-slate-400 font-medium"
@@ -79,7 +109,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession 
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
-                  placeholder="Password"
+                  placeholder={t.password}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full p-5 bg-[#f3f7fb] rounded-2xl text-[#0a1128] border-2 border-transparent focus:border-cyan-400 outline-none transition-all placeholder:text-slate-400 font-medium"
@@ -103,12 +133,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession 
                 type="submit"
                 className="w-full bg-gradient-to-r from-cyan-500 to-cyan-700 hover:from-cyan-400 hover:to-cyan-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-cyan-500/30 active:scale-[0.98] transition-all mt-6 text-xl tracking-wide uppercase"
               >
-                Enter Portal
+                {t.enterPortal}
               </button>
 
               <div className="text-center mt-6">
                 <button type="button" className="text-slate-400 hover:text-cyan-600 text-sm font-bold transition-colors uppercase tracking-widest">
-                  Reset Password
+                  {t.resetPassword}
                 </button>
               </div>
             </form>
@@ -125,11 +155,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession 
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h2 className="text-3xl font-black text-[#0a1128] tracking-tight">Experience Demo</h2>
+              <h2 className="text-3xl font-black text-[#0a1128] tracking-tight">{t.experienceDemo}</h2>
               <div className="mt-2 h-1.5 w-16 bg-indigo-400 rounded-full mx-auto"></div>
             </div>
 
-            {/* Vibrant Colorful Pattern replacing Black Box */}
             <div className="flex justify-center mb-10 relative z-10">
               <div className="grid grid-cols-3 gap-3 p-4 bg-white/40 backdrop-blur-md rounded-[2rem] border-2 border-indigo-100 shadow-lg">
                 {[...Array(9)].map((_, i) => (
@@ -145,16 +174,23 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession 
               </div>
             </div>
 
-            <button
-              onClick={handleDemoStart}
-              className="w-full bg-[#0a1128] text-white hover:bg-indigo-900 font-black py-5 rounded-2xl transition-all flex items-center justify-center gap-4 active:scale-[0.98] shadow-2xl shadow-indigo-500/20 text-xl border-b-4 border-indigo-700"
-            >
-              <svg className="w-7 h-7 text-indigo-400" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" />
-              </svg>
-              <span>FREE 30 MIN DEMO</span>
-            </button>
-            <p className="mt-4 text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em]">Session ends automatically after 30m</p>
+            {isDemoBlocked ? (
+               <div className="w-full bg-rose-50 border-2 border-rose-200 p-6 rounded-2xl text-rose-600 font-bold relative z-10">
+                  <p className="uppercase tracking-widest text-xs mb-1">Trial Period Expired</p>
+                  <p className="text-sm">This device has already used the free demo session. Please log in with a paid account to continue.</p>
+               </div>
+            ) : (
+              <button
+                onClick={handleDemoStart}
+                className="w-full bg-[#0a1128] text-white hover:bg-indigo-900 font-black py-5 rounded-2xl transition-all flex items-center justify-center gap-4 active:scale-[0.98] shadow-2xl shadow-indigo-500/20 text-xl border-b-4 border-indigo-700"
+              >
+                <svg className="w-7 h-7 text-indigo-400" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" />
+                </svg>
+                <span>{t.freeDemo}</span>
+              </button>
+            )}
+            <p className="mt-4 text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em]">{t.demoWarning}</p>
           </div>
         </div>
       </div>
@@ -163,13 +199,16 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession 
       <div className="fixed bottom-8 right-8 flex flex-col items-end gap-3 group">
         <div className="bg-white px-5 py-3 rounded-2xl shadow-2xl border-2 border-slate-50 opacity-0 group-hover:opacity-100 transition-all mb-2 translate-y-2 group-hover:translate-y-0">
            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Octo • Online</div>
-           <div className="text-sm font-bold text-slate-800">Welcome to Vision Therapy. Ask us anything!</div>
+           <div className="text-sm font-bold text-slate-800">{t.octoGreeting}</div>
         </div>
-        <button className="bg-white px-7 py-4 rounded-full shadow-2xl flex items-center gap-4 border-2 border-white hover:scale-105 active:scale-95 transition-all group/btn">
+        <button 
+          onClick={() => window.open('https://wa.me/+94715602660', '_blank')}
+          className="bg-white px-7 py-4 rounded-full shadow-2xl flex items-center gap-4 border-2 border-white hover:scale-105 active:scale-95 transition-all group/btn"
+        >
           <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-indigo-100 group-hover/btn:border-indigo-400 transition-colors">
              <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="Support" />
           </div>
-          <span className="font-black text-[#0a1128] text-lg">Need help?</span>
+          <span className="font-black text-[#0a1128] text-lg">{t.needHelp}</span>
         </button>
       </div>
     </div>

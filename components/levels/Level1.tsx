@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { Page } from '../../types';
+import { Page, LevelStats } from '../../types';
 import LevelLayout from '../LevelLayout';
 import GameEndScreen from '../GameEndScreen';
 import GaborText from '../GaborText';
@@ -7,7 +8,7 @@ import { ALPHABET } from '../../constants';
 
 interface Level1Props {
   setCurrentPage: (page: Page) => void;
-  saveLevelCompletion: (levelId: string, stars: number) => void;
+  saveLevelCompletion: (levelId: string, stars: number, details?: Partial<LevelStats>) => void;
 }
 
 const START_FONT_SIZE = 120;
@@ -114,15 +115,23 @@ const Level1: React.FC<Level1Props> = ({ setCurrentPage, saveLevelCompletion }) 
         }
       }
       
+      const stats = {
+        score: finalCorrect,
+        incorrect: finalIncorrect,
+        contrast: currentContrast,
+        size: currentFontSize,
+        category: 'amblyo' as const
+      };
+
       if (isSuccess) {
         setAwardedStars(3);
         setShowStarAnimation(true);
         setTimeout(() => {
-            saveLevelCompletion('level1', stars);
+            saveLevelCompletion('level1', stars, stats);
             setGameState('finished');
         }, 1500);
       } else {
-        saveLevelCompletion('level1', stars);
+        saveLevelCompletion('level1', stars, stats);
         setGameState('finished');
       }
     } else {
