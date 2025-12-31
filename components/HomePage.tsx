@@ -71,7 +71,7 @@ const HomePage: React.FC<HomePageProps> = ({ setCurrentPage, setIsSideMenuOpen, 
   const displayName = userProfile?.name || 'Amblyo Patient';
 
   return (
-    <div className="relative min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 sm:p-6 md:p-8">
+    <div className="relative min-h-screen bg-slate-50 flex flex-col items-center justify-start p-4 sm:p-6 md:p-8 pt-64 lg:pt-[22rem] pb-32">
       {/* Refined Top Header */}
       <header className="fixed top-0 left-0 right-0 h-28 bg-white border-b border-slate-100 z-50 flex items-center justify-between px-10 shadow-md">
         <div className="flex items-center gap-6">
@@ -157,8 +157,8 @@ const HomePage: React.FC<HomePageProps> = ({ setCurrentPage, setIsSideMenuOpen, 
         </div>
       </header>
 
-      {/* Main Content Card - Perfectly Centered */}
-      <div className="bg-white rounded-[3rem] shadow-2xl p-10 sm:p-14 max-w-5xl w-full flex flex-col border border-white/50 relative overflow-hidden z-10">
+      {/* Main Content Card - perfectly positioned lower for Laptop Screens */}
+      <div className="bg-white rounded-[3rem] shadow-2xl p-10 sm:p-14 max-w-5xl w-full flex flex-col border border-white/50 relative overflow-hidden z-10 animate-fade-in-up">
         {/* Decorative Background Element */}
         <div className="absolute top-0 right-0 w-80 h-80 bg-cyan-50 rounded-full -mr-40 -mt-40 blur-3xl opacity-60"></div>
         
@@ -181,7 +181,7 @@ const HomePage: React.FC<HomePageProps> = ({ setCurrentPage, setIsSideMenuOpen, 
 
         <div className="w-full space-y-14 relative z-10">
           {Object.entries(levelCategories).map(([category, levels]) => (
-              <div key={category} className="animate-fade-in-up">
+              <div key={category} className="animate-fade-in-up-delay">
                   <div className="flex items-center gap-5 mb-8">
                     <div className="w-2.5 h-10 bg-cyan-500 rounded-full"></div>
                     <h2 className="text-3xl font-black text-slate-800 tracking-tight uppercase">{category}</h2>
@@ -221,11 +221,15 @@ const HomePage: React.FC<HomePageProps> = ({ setCurrentPage, setIsSideMenuOpen, 
       
       <style>{`
         @keyframes fade-in-up {
-          from { opacity: 0; transform: translateY(20px); }
+          from { opacity: 0; transform: translateY(30px); }
           to { opacity: 1; transform: translateY(0); }
         }
         .animate-fade-in-up {
-          animation: fade-in-up 0.6s ease-out forwards;
+          animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .animate-fade-in-up-delay {
+          animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards;
+          opacity: 0;
         }
         .no-scrollbar::-webkit-scrollbar {
           display: none;

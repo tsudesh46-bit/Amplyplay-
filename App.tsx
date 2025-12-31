@@ -7,6 +7,7 @@ import SideMenu from './components/SideMenu';
 import PerformancePage from './components/PerformancePage';
 import ProfilePage from './components/ProfilePage';
 import SupportPage from './components/SupportPage';
+import TimeAssessmentPage from './components/TimeAssessmentPage';
 import StrabplayHome from './components/StrabplayHome';
 import Level1 from './components/levels/Level1';
 import Level2 from './components/levels/Level2';
@@ -147,6 +148,8 @@ const App: React.FC = () => {
         return <PerformancePage setCurrentPage={setCurrentPage} completedLevels={completedLevels} gameHistory={gameHistory} language={language} />;
       case 'profile':
         return <ProfilePage setCurrentPage={setCurrentPage} profile={userProfile} onUpdateProfile={updateProfile} />;
+      case 'time_assessment':
+        return <TimeAssessmentPage setCurrentPage={setCurrentPage} />;
       case 'level1':
         return <Level1 {...levelProps} />;
       case 'level2':

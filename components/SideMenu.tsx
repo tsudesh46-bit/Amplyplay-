@@ -70,6 +70,19 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose, setCurrentPage, co
                   </button>
               </li>
               <li>
+                  <button 
+                    onClick={() => navigateTo('time_assessment')}
+                    className="flex items-center gap-3 w-full p-3 rounded-xl text-slate-300 hover:bg-white/5 hover:text-white transition-all group"
+                  >
+                      <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center group-hover:bg-cyan-600 transition-colors">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <span className="font-semibold">Time Assessment</span>
+                  </button>
+              </li>
+              <li>
                   <button onClick={() => navigateTo('profile')} className="flex items-center gap-3 w-full p-3 rounded-xl text-slate-300 hover:bg-white/5 hover:text-white transition-all group">
                       <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center group-hover:bg-cyan-600 transition-colors">
                         <UserIcon className="w-4 h-4 text-cyan-400"/>

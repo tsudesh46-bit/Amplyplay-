@@ -40,9 +40,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession,
   };
 
   return (
-    <div className="min-h-screen bg-[#eef2f8] flex flex-col font-sans">
+    <div className="min-h-screen bg-[#eef2f8] flex flex-col font-sans overflow-x-hidden">
       {/* Top Navbar */}
-      <nav className="w-full h-20 bg-[#0a1128] flex items-center justify-between px-6 sm:px-10 shrink-0 border-b border-white/5">
+      <nav className="w-full h-20 bg-[#0a1128] flex items-center justify-between px-6 sm:px-10 shrink-0 border-b border-white/5 z-20 shadow-lg">
         <div className="flex items-center gap-6">
           <div className="text-white font-black text-xl tracking-tighter uppercase flex items-center gap-3">
             <div className="bg-cyan-500 text-[#0a1128] w-8 h-8 flex items-center justify-center rounded-lg text-lg">A</div>
@@ -79,14 +79,16 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession,
         </div>
       </nav>
 
-      <div className="flex-grow flex flex-col items-center justify-center p-4 py-12">
+      <div className="flex-grow flex flex-col items-center justify-center p-4 py-12 lg:py-8">
         <h2 className="text-[#0a1128] text-xl sm:text-3xl font-black uppercase tracking-[0.2em] mb-12 text-center drop-shadow-sm px-4">
           {t.tagline}
         </h2>
 
-        <div className="w-full max-w-lg space-y-8">
-          {/* Login Card */}
-          <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 sm:p-12 border-2 border-white relative overflow-hidden">
+        {/* Updated Layout Container: flex-col on mobile, flex-row on md (tablets/laptops) and above */}
+        <div className="w-full max-w-screen-xl flex flex-col md:flex-row items-center md:items-stretch justify-center gap-8 lg:gap-12 px-4">
+          
+          {/* LEFT SIDE: User Login Card (White Box) */}
+          <div className="w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl p-8 sm:p-12 border-2 border-white relative overflow-hidden flex flex-col justify-center animate-fade-in-left">
             <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-50 rounded-full -mr-16 -mt-16 opacity-50"></div>
             
             <div className="flex flex-col items-center mb-10 relative z-10">
@@ -131,7 +133,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession,
 
               <button
                 type="submit"
-                className="w-full bg-gradient-to-r from-cyan-500 to-cyan-700 hover:from-cyan-400 hover:to-cyan-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-cyan-500/30 active:scale-[0.98] transition-all mt-6 text-xl tracking-wide uppercase"
+                className="w-full bg-gradient-to-r from-cyan-500 to-cyan-700 hover:from-cyan-400 hover:to-teal-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-cyan-500/30 active:scale-[0.98] transition-all mt-6 text-xl tracking-wide uppercase"
               >
                 {t.enterPortal}
               </button>
@@ -144,9 +146,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession,
             </form>
           </div>
 
-          {/* Enhanced Free Demo Card */}
-          <div className="bg-gradient-to-br from-indigo-50 to-white rounded-[2.5rem] shadow-2xl p-8 sm:p-12 border-4 border-indigo-200 text-center relative overflow-hidden">
-            <div className="absolute -top-10 -right-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-2xl"></div>
+          {/* RIGHT SIDE: Experience Demo Card (White Box) */}
+          <div className="w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl p-8 sm:p-12 border-2 border-white relative overflow-hidden flex flex-col justify-center text-center animate-fade-in-right">
+            <div className="absolute -top-10 -right-10 w-40 h-40 bg-indigo-500/5 rounded-full blur-2xl"></div>
             
             <div className="flex flex-col items-center mb-8 relative z-10">
               <div className="w-20 h-20 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-3xl flex items-center justify-center text-white mb-5 shadow-2xl shadow-indigo-500/40 transform rotate-3">
@@ -160,7 +162,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession,
             </div>
 
             <div className="flex justify-center mb-10 relative z-10">
-              <div className="grid grid-cols-3 gap-3 p-4 bg-white/40 backdrop-blur-md rounded-[2rem] border-2 border-indigo-100 shadow-lg">
+              <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 backdrop-blur-md rounded-[2rem] border-2 border-indigo-50 shadow-inner">
                 {[...Array(9)].map((_, i) => (
                   <div 
                     key={i} 
@@ -211,6 +213,19 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession,
           <span className="font-black text-[#0a1128] text-lg">{t.needHelp}</span>
         </button>
       </div>
+      
+      <style>{`
+        @keyframes fade-in-left {
+          from { opacity: 0; transform: translateX(-30px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes fade-in-right {
+          from { opacity: 0; transform: translateX(30px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        .animate-fade-in-left { animation: fade-in-left 0.8s ease-out forwards; }
+        .animate-fade-in-right { animation: fade-in-right 0.8s ease-out forwards; }
+      `}</style>
     </div>
   );
 };

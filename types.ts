@@ -6,6 +6,7 @@ export type Page =
   | 'profile'
   | 'strabplay_home'
   | 'support'
+  | 'time_assessment'
   | 'level1' 
   | 'level2' 
   | 'level3' 
