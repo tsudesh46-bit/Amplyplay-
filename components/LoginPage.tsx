@@ -9,12 +9,14 @@ interface LoginPageProps {
   startDemoSession?: () => void;
   language: Language;
   setLanguage: (lang: Language) => void;
+  onLoginAttempt: (user: string, pass: string) => boolean;
 }
 
-const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession, language, setLanguage }) => {
+const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession, language, setLanguage, onLoginAttempt }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [isDemoBlocked, setIsDemoBlocked] = useState(false);
   
   const t = translations[language];
@@ -28,7 +30,11 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession,
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    setCurrentPage('home');
+    setError(null);
+    const success = onLoginAttempt(username, password);
+    if (!success) {
+      setError(language === 'si' ? 'පරිශීලක නාමය හෝ මුරපදය වැරදියි' : 'Invalid username or password');
+    }
   };
 
   const handleDemoStart = () => {
@@ -36,7 +42,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession,
     if (startDemoSession) {
       startDemoSession();
     }
-    setCurrentPage('home');
   };
 
   return (
@@ -84,10 +89,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession,
           {t.tagline}
         </h2>
 
-        {/* Updated Layout Container: flex-col on mobile, flex-row on md (tablets/laptops) and above */}
         <div className="w-full max-w-screen-xl flex flex-col md:flex-row items-center md:items-stretch justify-center gap-8 lg:gap-12 px-4">
           
-          {/* LEFT SIDE: User Login Card (White Box) */}
+          {/* User Login Card */}
           <div className="w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl p-8 sm:p-12 border-2 border-white relative overflow-hidden flex flex-col justify-center animate-fade-in-left">
             <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-50 rounded-full -mr-16 -mt-16 opacity-50"></div>
             
@@ -96,6 +100,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession,
                 <UserIcon className="w-9 h-9" />
               </div>
               <h1 className="text-3xl font-black text-[#0a1128] tracking-tight">{t.login}</h1>
+              {error && <p className="text-rose-500 text-xs font-bold mt-2 uppercase tracking-widest">{error}</p>}
             </div>
 
             <form onSubmit={handleLogin} className="space-y-5 relative z-10">
@@ -146,7 +151,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession,
             </form>
           </div>
 
-          {/* RIGHT SIDE: Experience Demo Card (White Box) */}
+          {/* Experience Demo Card */}
           <div className="w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl p-8 sm:p-12 border-2 border-white relative overflow-hidden flex flex-col justify-center text-center animate-fade-in-right">
             <div className="absolute -top-10 -right-10 w-40 h-40 bg-indigo-500/5 rounded-full blur-2xl"></div>
             
@@ -197,32 +202,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, startDemoSession,
         </div>
       </div>
 
-      {/* Floating Support Button */}
-      <div className="fixed bottom-8 right-8 flex flex-col items-end gap-3 group">
-        <div className="bg-white px-5 py-3 rounded-2xl shadow-2xl border-2 border-slate-50 opacity-0 group-hover:opacity-100 transition-all mb-2 translate-y-2 group-hover:translate-y-0">
-           <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Octo • Online</div>
-           <div className="text-sm font-bold text-slate-800">{t.octoGreeting}</div>
-        </div>
-        <button 
-          onClick={() => window.open('https://wa.me/+94715602660', '_blank')}
-          className="bg-white px-7 py-4 rounded-full shadow-2xl flex items-center gap-4 border-2 border-white hover:scale-105 active:scale-95 transition-all group/btn"
-        >
-          <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-indigo-100 group-hover/btn:border-indigo-400 transition-colors">
-             <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="Support" />
-          </div>
-          <span className="font-black text-[#0a1128] text-lg">{t.needHelp}</span>
-        </button>
-      </div>
-      
       <style>{`
-        @keyframes fade-in-left {
-          from { opacity: 0; transform: translateX(-30px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-        @keyframes fade-in-right {
-          from { opacity: 0; transform: translateX(30px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
+        @keyframes fade-in-left { from { opacity: 0; transform: translateX(-30px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes fade-in-right { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
         .animate-fade-in-left { animation: fade-in-left 0.8s ease-out forwards; }
         .animate-fade-in-right { animation: fade-in-right 0.8s ease-out forwards; }
       `}</style>

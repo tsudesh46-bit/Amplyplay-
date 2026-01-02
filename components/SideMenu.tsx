@@ -1,8 +1,8 @@
 
 import React from 'react';
-import { Page, CompletedLevels } from '../types';
+import { Page, CompletedLevels, UserProfile } from '../types';
 import { TOTAL_LEVELS } from '../constants';
-import { CloseIcon, StarIcon, UserIcon, PlayIcon, LogoIcon } from './ui/Icons';
+import { CloseIcon, StarIcon, UserIcon, PlayIcon, LogoIcon, SettingsIcon } from './ui/Icons';
 
 interface SideMenuProps {
   isOpen: boolean;
@@ -10,9 +10,10 @@ interface SideMenuProps {
   setCurrentPage: (page: Page) => void;
   completedLevels: CompletedLevels;
   onLogout: () => void;
+  userProfile?: UserProfile;
 }
 
-const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose, setCurrentPage, completedLevels, onLogout }) => {
+const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose, setCurrentPage, completedLevels, onLogout, userProfile }) => {
   const levels = Array.from({ length: TOTAL_LEVELS }, (_, i) => i + 1);
 
   const navigateTo = (page: Page) => {
@@ -53,7 +54,7 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose, setCurrentPage, co
               <li>
                   <button onClick={() => navigateTo('home')} className="flex items-center gap-3 w-full p-3 rounded-xl text-slate-300 hover:bg-white/5 hover:text-white transition-all group">
                       <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center group-hover:bg-cyan-600 transition-colors">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
                       </div>
                       <span className="font-semibold">Amblyoplay</span>
                   </button>
@@ -67,6 +68,17 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose, setCurrentPage, co
                         <PlayIcon className="w-5 h-5"/>
                       </div>
                       <span className="font-bold">Strabplay Home</span>
+                  </button>
+              </li>
+              <li>
+                  <button 
+                    onClick={() => navigateTo('administration')}
+                    className="flex items-center gap-3 w-full p-3 rounded-xl text-yellow-400 hover:bg-yellow-400 hover:text-slate-900 transition-all group border border-yellow-500/30"
+                  >
+                      <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center group-hover:bg-yellow-500 transition-colors">
+                        <SettingsIcon className="w-4 h-4 text-yellow-500 group-hover:text-slate-900"/>
+                      </div>
+                      <span className="font-bold">Administration</span>
                   </button>
               </li>
               <li>
