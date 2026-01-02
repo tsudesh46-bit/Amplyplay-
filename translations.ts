@@ -3,7 +3,7 @@ export const translations = {
   en: {
     brand: "AMBLYOPLAY",
     strabBrand: "STRABPLAY",
-    tagline: "From Brain Science to Full Vision",
+    tagline: "From Brain and Eye practice to Full Vision",
     login: "User Login",
     username: "Username",
     password: "Password",
@@ -35,7 +35,7 @@ export const translations = {
   si: {
     brand: "ඇම්බ්ලයෝප්ලේ",
     strabBrand: "ස්ට්‍රැබ්ප්ලේ",
-    tagline: "මොළයේ විද්‍යාවේ සිට පූර්ණ පෙනීම දක්වා",
+    tagline: "මොළයේ සහ ඇසේ පුහුණුවේ සිට පූර්ණ පෙනීම දක්වා",
     login: "පරිශීලක පිවිසුම",
     username: "පරිශීලක නාමය",
     password: "මුරපදය",
