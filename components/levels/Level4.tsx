@@ -47,7 +47,7 @@ const FireworksReward: React.FC<{ show: boolean, color?: string }> = ({ show, co
   );
 };
 
-const LocalGaborEmoji: React.FC<{
+const LocalPatternEmoji: React.FC<{
     emoji: string;
     isTarget: boolean;
     contrast: number;
@@ -79,7 +79,7 @@ const LocalGaborEmoji: React.FC<{
 
             {isTarget && (
                 <div 
-                    key={`gabor-${emoji}`} 
+                    key={`pattern-${emoji}`} 
                     style={{ 
                         gridArea: '1 / 1',
                         fontSize: `${fontSize}px`,
@@ -273,7 +273,7 @@ const Level4: React.FC<Level4Props> = ({ setCurrentPage, saveLevelCompletion }) 
         <div className="w-full h-full grid grid-cols-10 grid-rows-10 gap-px bg-slate-200 border border-slate-300">
             {Array.from({ length: GRID_SIZE }).map((_, index) => (
                 <div key={index} className="w-full h-full bg-white relative overflow-hidden">
-                    <LocalGaborEmoji
+                    <LocalPatternEmoji
                         emoji={currentEmoji || '❓'}
                         isTarget={index === correctIndex}
                         contrast={currentContrast}

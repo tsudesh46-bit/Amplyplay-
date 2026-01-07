@@ -4,8 +4,8 @@ import { Page, LevelStats } from '../../types';
 import { NextIcon, RetryIcon, HomeIcon } from '../ui/Icons';
 import ConfirmationModal from '../ConfirmationModal';
 
-// Helper for Gabor style
-const getDynamicGaborStyle = (isCorrect: boolean, contrast: number, fontSize: number): React.CSSProperties => {
+// Helper for Pattern style
+const getDynamicPatternStyle = (isCorrect: boolean, contrast: number, fontSize: number): React.CSSProperties => {
     const baseColorValue = 0; // Black
     const textColor = `rgba(${baseColorValue}, ${baseColorValue}, ${baseColorValue}, ${contrast})`;
     const baseStyle: React.CSSProperties = {
@@ -21,11 +21,11 @@ const getDynamicGaborStyle = (isCorrect: boolean, contrast: number, fontSize: nu
         justifyContent: 'center',
     };
     if (isCorrect) {
-        const gaborColor1 = `rgba(${baseColorValue}, ${baseColorValue}, ${baseColorValue}, ${contrast})`;
-        const gaborColor2 = `rgba(${baseColorValue + 50}, ${baseColorValue + 50}, ${baseColorValue + 50}, ${contrast})`; // A slightly lighter black
+        const patternColor1 = `rgba(${baseColorValue}, ${baseColorValue}, ${baseColorValue}, ${contrast})`;
+        const patternColor2 = `rgba(${baseColorValue + 50}, ${baseColorValue + 50}, ${baseColorValue + 50}, ${contrast})`; // A slightly lighter black
         return {
             ...baseStyle,
-            backgroundImage: `repeating-linear-gradient(45deg, ${gaborColor1}, ${gaborColor1} 3px, ${gaborColor2} 3px, ${gaborColor2} 6px)`,
+            backgroundImage: `repeating-linear-gradient(45deg, ${patternColor1}, ${patternColor1} 3px, ${patternColor2} 3px, ${patternColor2} 6px)`,
             WebkitBackgroundClip: 'text',
             backgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
@@ -274,7 +274,7 @@ const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) 
                             top: pos.top,
                             left: pos.left,
                             transform: 'translate(-50%, -50%)',
-                            ...getDynamicGaborStyle(index === correctIndex, currentContrast, currentFontSize),
+                            ...getDynamicPatternStyle(index === correctIndex, currentContrast, currentFontSize),
                         }}
                         onClick={() => handleNumberClick(index === correctIndex)}
                     >
@@ -290,7 +290,7 @@ const Level2: React.FC<Level2Props> = ({ setCurrentPage, saveLevelCompletion }) 
             <FireworksReward show={showStarAnimation} />
             {renderGame()}
             {gameState === 'playing' && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-full max-w-sm px-4">
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-full max-sm px-4">
                     <div className="mb-2">
                         <div className="flex justify-between items-center mb-1 text-slate-600">
                             <span className="text-sm font-semibold">Progress</span>

@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Page, LevelStats } from '../../types';
 import LevelLayout from '../LevelLayout';
 import GameEndScreen from '../GameEndScreen';
-import GaborText from '../GaborText';
+import PatternText from '../PatternText';
 import { ALPHABET } from '../../constants';
 
 interface Level1Props {
@@ -164,22 +164,22 @@ const Level1: React.FC<Level1Props> = ({ setCurrentPage, saveLevelCompletion }) 
     
     return (
       <div className="flex justify-center items-center h-full w-full space-x-12 sm:space-x-24">
-        <GaborText
+        <PatternText
             isCorrect={correctSide === 0}
             contrast={currentContrast}
             fontSize={currentFontSize}
             onClick={() => handleLetterClick(correctSide === 0)}
         >
             {currentLetter}
-        </GaborText>
-        <GaborText
+        </PatternText>
+        <PatternText
             isCorrect={correctSide === 1}
             contrast={currentContrast}
             fontSize={currentFontSize}
             onClick={() => handleLetterClick(correctSide === 1)}
         >
             {currentLetter}
-        </GaborText>
+        </PatternText>
       </div>
     );
   };

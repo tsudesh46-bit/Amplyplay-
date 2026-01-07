@@ -4,10 +4,16 @@ export type Page =
   | 'home' 
   | 'performance' 
   | 'profile'
+  | 'settings'
   | 'strabplay_home'
   | 'support'
+  | 'product_info'
+  | 'about_amblyopia'
+  | 'about_strabismus'
   | 'time_assessment'
   | 'administration'
+  | 'media'
+  | 'perceptual'
   | 'level1' 
   | 'level2' 
   | 'level3' 
@@ -37,6 +43,10 @@ export interface UserProfile {
   joinedDate: string;
   role?: 'admin' | 'patient';
   
+  // Activity Monitoring
+  lastActive?: string;
+  isOnline?: boolean;
+
   // Module Access Control
   amblyoLocked?: boolean;
   strabLocked?: boolean;

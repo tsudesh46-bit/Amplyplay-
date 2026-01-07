@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Page, LevelStats } from '../../types';
-import GaborCircle from '../GaborCircle';
+import PatternCircle from '../PatternCircle';
 import { HomeIcon, HeartIcon, HeartOutlineIcon, XCircleIcon, CheckCircleIcon, NextIcon, LogoIcon, RetryIcon } from '../ui/Icons';
 import ConfirmationModal from '../ConfirmationModal';
 
@@ -190,7 +190,7 @@ interface Level5Props {
 
 interface PeripheralPatch {
     id: string;
-    type: 'gabor' | 'fake';
+    type: 'pattern' | 'fake';
     size: number;
     x: number;
     y: number;
@@ -199,7 +199,7 @@ interface PeripheralPatch {
 
 interface CentralPatch {
     id: string;
-    type: 'gabor' | 'fake';
+    type: 'pattern' | 'fake';
     size: number;
     x: number;
     y: number;
@@ -263,7 +263,7 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage, saveLevelCompletion }) 
                 const fakeCount = 1 + Math.floor(currentScore / 3);
                 const newPatches: CentralPatch[] = [];
                 const patchesToSpawn = [
-                    { type: 'gabor' },
+                    { type: 'pattern' },
                     ...Array(fakeCount).fill({ type: 'fake' })
                 ];
 
@@ -287,10 +287,10 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage, saveLevelCompletion }) 
                         const contrast = 0.3 + Math.random() * 0.7;
                         newPatches.push({
                             id: `c-${Date.now()}-${i}`,
-                            type: p.type as 'gabor' | 'fake',
+                            type: p.type as 'pattern' | 'fake',
                             size, x, y, contrast
                         });
-                        if (p.type === 'gabor') targetCounterRef.current += 1;
+                        if (p.type === 'pattern') targetCounterRef.current += 1;
                     }
                 });
 
@@ -324,7 +324,7 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage, saveLevelCompletion }) 
 
         const newTarget: PeripheralPatch = {
             id: `p-target-${timestamp}`,
-            type: 'gabor',
+            type: 'pattern',
             size: targetSize, x: targetX, y: targetY, side: targetSide
         };
         
@@ -376,7 +376,7 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage, saveLevelCompletion }) 
     const handlePeripheralClick = (patch: PeripheralPatch, e: React.MouseEvent) => {
         if (gameState !== 'playing') return;
         
-        if (patch.type === 'gabor') {
+        if (patch.type === 'pattern') {
             setPeripheralScore(prev => prev + 1);
             const id = `exp-${Date.now()}`;
             setExplosions(prev => [...prev, { id, x: e.clientX, y: e.clientY }]);
@@ -456,7 +456,7 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage, saveLevelCompletion }) 
             <div className="flex flex-col items-center justify-center h-screen w-full bg-slate-50 p-4 relative overflow-hidden">
                 <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-cyan-200/20 rounded-full blur-3xl animate-pulse"></div>
                 <div className="absolute bottom-[-10%] left-[-10%] w-96 h-96 bg-teal-200/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
-                <div className="bg-white/80 backdrop-blur-xl p-8 rounded-[2rem] shadow-2xl max-w-sm w-full text-center relative border border-white/50 animate-fade-in-up">
+                <div className="bg-white/80 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl max-w-sm w-full text-center relative border border-white/50 animate-fade-in-up">
                      <div className="relative flex justify-center items-center mb-10 mt-2">
                          <div className="absolute w-40 h-40 rounded-full border border-cyan-100 animate-[spin_10s_linear_infinite]"></div>
                          <div className="absolute w-32 h-32 rounded-full border-2 border-cyan-200/60 animate-pulse"></div>
@@ -505,7 +505,7 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage, saveLevelCompletion }) 
                 <SimpleECGCanvas />
                 {allPatches.map(patch => (
                     <div key={patch.id} className="absolute animate-pop-in z-20" style={{ left: `${patch.x}%`, top: `${patch.y}%`, transform: 'translate(-50%, -50%)' }}>
-                         <GaborCircle 
+                         <PatternCircle 
                              size={patch.size} contrast={dynamicContrast} onClick={(e) => handlePeripheralClick(patch, e)}
                              style={patch.type === 'fake' ? { backgroundImage: 'none', backgroundColor: '#888', boxShadow: '0 0 10px rgba(136,136,136,0.5)', border: 'none' } : { boxShadow: '0 0 10px rgba(255,255,255,0.5)' }}
                          />
@@ -545,8 +545,8 @@ const Level5: React.FC<Level5Props> = ({ setCurrentPage, saveLevelCompletion }) 
                  <div className="flex-1 relative bg-white flex items-center justify-center overflow-hidden border-y-4 border-slate-200">
                      {centralPatches.map(patch => (
                          <div key={patch.id} className="absolute rounded-full animate-pop-in" style={{ left: `${patch.x}%`, top: `${patch.y}%`, width: patch.size, height: patch.size, transform: 'translate(-50%, -50%)', pointerEvents: 'none' }}>
-                             {patch.type === 'gabor' ? (
-                                 <GaborCircle size={patch.size} contrast={patch.contrast || 1.0} onClick={()=>{}} className="pointer-events-none shadow-xl" />
+                             {patch.type === 'pattern' ? (
+                                 <PatternCircle size={patch.size} contrast={patch.contrast || 1.0} onClick={()=>{}} className="pointer-events-none shadow-xl" />
                              ) : (
                                  <div className="w-full h-full rounded-full" style={{ backgroundColor: '#888', opacity: patch.contrast || 0.5, boxShadow: '0 0 10px rgba(136,136,136,0.5)' }} />
                              )}

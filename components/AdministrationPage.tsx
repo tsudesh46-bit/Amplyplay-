@@ -1,24 +1,31 @@
 
-import React, { useState } from 'react';
-import { Page, UserProfile } from '../types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Page, UserProfile, LevelStats, CompletedLevels } from '../types';
 import { HomeIcon, UserIcon, CloseIcon, SettingsIcon } from './ui/Icons';
+import PerformancePage from './PerformancePage';
+import TimeAssessmentPage from './TimeAssessmentPage';
 
 interface AdministrationPageProps {
   setCurrentPage: (page: Page) => void;
   users: UserProfile[];
   setUsers: React.Dispatch<React.SetStateAction<UserProfile[]>>;
   currentUserId?: string;
+  allProgress: Record<string, { levels: CompletedLevels, history: LevelStats[] }>;
 }
 
 const VA_SNELLEN = ["1/60", "2/60", "3/60", "6/60", "6/36", "6/24", "6/18", "6/12", "6/9", "6/6"];
 const VA_LOGMAR = ["1.8", "1.5", "1.3", "1.0", "0.8", "0.6", "0.5", "0.3", "0.2", "0.0"];
 
-const AdministrationPage: React.FC<AdministrationPageProps> = ({ setCurrentPage, users, setUsers, currentUserId }) => {
+const AdministrationPage: React.FC<AdministrationPageProps> = ({ setCurrentPage, users, setUsers, currentUserId, allProgress }) => {
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [adminUsername, setAdminUsername] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Monitoring View State
+  const [viewingPatientStats, setViewingPatientStats] = useState<{ id: string, type: 'performance' | 'time' } | null>(null);
 
   // Management State
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -32,8 +39,30 @@ const AdministrationPage: React.FC<AdministrationPageProps> = ({ setCurrentPage,
     acc_amp_near_bi: '', acc_amp_near_bo: '', acc_amp_far_bi: '', acc_amp_far_bo: '',
     dev_near_type: 'BI', dev_near_value: '', dev_far_type: 'BI', dev_far_value: '',
     fixation_od: 'Central', fixation_os: 'Central', diagnosis: '', rx_plans: '',
-    amblyoLocked: false, strabLocked: true // Updated Default: Strabplay is locked by default
+    amblyoLocked: false, strabLocked: true
   });
+
+  // Simulated Online Sync Logic
+  const handleManualSync = useCallback((patientId?: string) => {
+    setIsSyncing(true);
+    // Simulate network delay
+    setTimeout(() => {
+        setIsSyncing(false);
+        console.log(`Synced data for ${patientId || 'all patients'}`);
+    }, 2000);
+  }, []);
+
+  // Auto-sync at 10:00 AM logic
+  useEffect(() => {
+    const checkAutoSync = () => {
+        const now = new Date();
+        if (now.getHours() === 10 && now.getMinutes() === 0 && !isSyncing) {
+            handleManualSync();
+        }
+    };
+    const interval = setInterval(checkAutoSync, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, [handleManualSync, isSyncing]);
 
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,6 +108,32 @@ const AdministrationPage: React.FC<AdministrationPageProps> = ({ setCurrentPage,
   const inputStyle = "w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-cyan-500 outline-none font-bold text-slate-800 text-sm";
   const labelStyle = "text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1";
 
+  // Render sub-dashboards if admin is viewing them
+  if (viewingPatientStats) {
+      const patientId = viewingPatientStats.id;
+      const patient = users.find(u => u.id === patientId);
+      const patientProg = allProgress[patientId] || { levels: {}, history: [] };
+
+      return (
+          <div className="fixed inset-0 bg-slate-50 z-[60] overflow-y-auto">
+              <nav className="h-16 bg-[#0a1128] text-white flex items-center justify-between px-6 sticky top-0 z-10 shadow-lg">
+                  <div className="flex items-center gap-4">
+                      <span className="text-[10px] font-black uppercase bg-cyan-500 text-slate-900 px-2 py-0.5 rounded">Monitoring</span>
+                      <span className="font-bold text-sm">Viewing: {patient?.name} ({patient?.customerId})</span>
+                  </div>
+                  <button onClick={() => setViewingPatientStats(null)} className="flex items-center gap-2 text-xs font-black uppercase hover:text-cyan-400 transition-colors">
+                      <CloseIcon className="w-5 h-5" /> Back to Administration
+                  </button>
+              </nav>
+              {viewingPatientStats.type === 'performance' ? (
+                  <PerformancePage setCurrentPage={() => {}} completedLevels={patientProg.levels} gameHistory={patientProg.history} language="en" />
+              ) : (
+                  <TimeAssessmentPage setCurrentPage={() => {}} gameHistory={patientProg.history} />
+              )}
+          </div>
+      );
+  }
+
   if (!isAdminLoggedIn) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
@@ -103,11 +158,20 @@ const AdministrationPage: React.FC<AdministrationPageProps> = ({ setCurrentPage,
     <div className="min-h-screen bg-slate-50 p-6 md:p-12 font-sans">
         <div className="max-w-6xl mx-auto">
             <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
-                <div>
-                    <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">Administration</h1>
-                    <p className="text-slate-400 font-bold text-sm uppercase tracking-widest">User & Medical Records</p>
+                <div className="flex items-center gap-4">
+                    <div>
+                        <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">Administration</h1>
+                        <p className="text-slate-400 font-bold text-sm uppercase tracking-widest flex items-center gap-2">
+                            User & Medical Records
+                            {isSyncing && <svg className="w-4 h-4 animate-spin text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>}
+                        </p>
+                    </div>
                 </div>
                 <div className="flex gap-4">
+                    <button onClick={() => handleManualSync()} className="bg-slate-800 text-white font-black px-6 py-3 rounded-xl shadow-lg hover:bg-slate-700 text-xs uppercase tracking-widest flex items-center gap-2">
+                        <svg className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        Update from Cloud
+                    </button>
                     <button onClick={() => { setIsAddingNew(true); setEditingUserId(null); setTempUser({ role: 'patient', va_method: 'Snellen', amblyoLocked: false, strabLocked: true }); }} className="bg-cyan-600 text-white font-black px-6 py-3 rounded-xl shadow-lg hover:bg-cyan-700 text-xs uppercase tracking-widest">Add Patient</button>
                     <button onClick={() => setCurrentPage('home')} className="bg-white border border-slate-200 text-slate-600 font-black px-6 py-3 rounded-xl shadow-sm hover:bg-slate-50 transition-all"><HomeIcon className="w-6 h-6" /></button>
                 </div>
@@ -123,15 +187,16 @@ const AdministrationPage: React.FC<AdministrationPageProps> = ({ setCurrentPage,
                     <thead className="bg-slate-50 border-b">
                         <tr>
                             <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Patient</th>
+                            <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
+                            <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Last Active</th>
                             <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Customer ID</th>
-                            <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Phone</th>
                             <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Role</th>
                             <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                         {filteredUsers.map(u => (
-                            <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
+                            <tr key={u.id} className="hover:bg-slate-50/50 transition-colors group">
                                 <td className="px-8 py-6">
                                     <div className="flex items-center gap-4">
                                         <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 font-black">{(u.nickname || u.name).charAt(0)}</div>
@@ -141,8 +206,18 @@ const AdministrationPage: React.FC<AdministrationPageProps> = ({ setCurrentPage,
                                         </div>
                                     </div>
                                 </td>
+                                <td className="px-8 py-6 text-center">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <div className={`w-2.5 h-2.5 rounded-full ${u.isOnline ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-slate-300'}`}></div>
+                                        <span className={`text-[9px] font-black uppercase tracking-widest ${u.isOnline ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                            {u.isOnline ? 'Online' : 'Offline'}
+                                        </span>
+                                    </div>
+                                </td>
+                                <td className="px-8 py-6 text-center text-[10px] font-bold text-slate-500">
+                                    {u.lastActive || 'Never'}
+                                </td>
                                 <td className="px-8 py-6 text-sm font-bold text-slate-600">{u.customerId || '---'}</td>
-                                <td className="px-8 py-6 text-sm font-bold text-slate-600">{u.phoneNumber || '---'}</td>
                                 <td className="px-8 py-6"><span className={`text-[10px] font-black px-2 py-1 rounded uppercase tracking-widest ${u.role === 'admin' ? 'bg-yellow-100 text-yellow-700' : 'bg-cyan-100 text-cyan-700'}`}>{u.role}</span></td>
                                 <td className="px-8 py-6 text-right flex justify-end gap-2">
                                     <button onClick={() => startEdit(u)} className="p-2 text-slate-400 hover:text-cyan-600 rounded-lg"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-5M16.123 4.123a2.121 2.121 0 013 3L11.75 18H8v-3.75l8.123-8.123z"/></svg></button>
@@ -168,6 +243,54 @@ const AdministrationPage: React.FC<AdministrationPageProps> = ({ setCurrentPage,
                     </div>
 
                     <div className="space-y-12 pb-10">
+                        {/* Clinical Monitoring Category */}
+                        {editingUserId && (
+                            <div className="space-y-6 bg-cyan-50/30 p-6 rounded-3xl border border-cyan-100">
+                                <h3 className="text-sm font-black text-cyan-800 uppercase tracking-widest flex items-center gap-2">
+                                    <span className="w-1 h-4 bg-cyan-500 rounded-full"></span> Clinical Monitoring
+                                </h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <button 
+                                        onClick={() => setViewingPatientStats({ id: editingUserId, type: 'performance' })}
+                                        className="bg-white p-4 rounded-2xl border border-cyan-100 shadow-sm hover:shadow-md transition-all flex flex-col items-center text-center gap-3 active:scale-95"
+                                    >
+                                        <div className="w-10 h-10 bg-cyan-500 text-white rounded-xl flex items-center justify-center">
+                                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-xs font-black text-slate-800 uppercase tracking-tight">Performance</span>
+                                            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Dashboard</span>
+                                        </div>
+                                    </button>
+                                    <button 
+                                        onClick={() => setViewingPatientStats({ id: editingUserId, type: 'time' })}
+                                        className="bg-white p-4 rounded-2xl border border-cyan-100 shadow-sm hover:shadow-md transition-all flex flex-col items-center text-center gap-3 active:scale-95"
+                                    >
+                                        <div className="w-10 h-10 bg-teal-500 text-white rounded-xl flex items-center justify-center">
+                                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-xs font-black text-slate-800 uppercase tracking-tight">Time Logs</span>
+                                            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Assessment</span>
+                                        </div>
+                                    </button>
+                                    <button 
+                                        onClick={() => handleManualSync(editingUserId)}
+                                        className={`bg-white p-4 rounded-2xl border border-cyan-100 shadow-sm hover:shadow-md transition-all flex flex-col items-center text-center gap-3 active:scale-95 ${isSyncing ? 'opacity-50' : ''}`}
+                                        disabled={isSyncing}
+                                    >
+                                        <div className="w-10 h-10 bg-indigo-500 text-white rounded-xl flex items-center justify-center">
+                                            <svg className={`w-6 h-6 ${isSyncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-xs font-black text-slate-800 uppercase tracking-tight">Sync Now</span>
+                                            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Live Cloud Data</span>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Section 0: Access Control */}
                         <div className="space-y-6 bg-rose-50/30 p-6 rounded-3xl border border-rose-100">
                              <h3 className="text-sm font-black text-rose-800 uppercase tracking-widest flex items-center gap-2">
@@ -190,7 +313,6 @@ const AdministrationPage: React.FC<AdministrationPageProps> = ({ setCurrentPage,
                                             <span className="text-[10px] text-slate-400 font-bold">Lock/Unlock Strabismus Module</span>
                                        </div>
                                        <label className="relative inline-flex items-center cursor-pointer">
-                                            {/* Toggle logic updated: checked if NOT locked (meaning accessible) */}
                                             <input type="checkbox" className="sr-only peer" checked={!tempUser.strabLocked} onChange={e => setTempUser({...tempUser, strabLocked: !e.target.checked})} />
                                             <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
                                        </label>

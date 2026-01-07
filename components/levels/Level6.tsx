@@ -8,7 +8,6 @@ import ConfirmationModal from '../ConfirmationModal';
 const MIN_SPEED = 150; 
 const BORDER_THICKNESS = 4;
 const GRID_CELL_SIZE = 25; 
-const VISUAL_GRID_SIZE = 150;
 
 const ACUITY_CONFIG = [
     { id: 0, label: '6/60', startSize: 151, endSize: 130, startContrast: 1.0, endContrast: 0.85 },
@@ -78,7 +77,6 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ levelIndex, unlockedIndex, onLeve
         nextDirectionRef.current = null; setScore(0); speedRef.current = MIN_SPEED;
     }, [levelIndex]);
 
-    const targetScore = 100;
     const progressRatio = Math.min(1, score / 100);
     const currentPatchSize = config ? config.startSize - (progressRatio * (config.startSize - config.endSize)) : 100;
     const currentContrast = config ? config.startContrast - (progressRatio * (config.startContrast - config.endContrast)) : 1.0;
@@ -196,10 +194,79 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ levelIndex, unlockedIndex, onLeve
 
     const renderOverlay = () => {
         if (gameState === 'start') return (
-            <div className="absolute inset-0 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center text-center z-40 p-6 rounded-md">
-                <h2 className="text-5xl font-bold text-white mb-2 font-pixel">LEVEL 06</h2>
-                <div className="bg-cyan-950/40 px-6 py-2 rounded-xl border border-cyan-500/30 mb-6 backdrop-blur-sm"><h3 className="text-3xl font-bold text-cyan-300 font-mono">{config.label}</h3></div>
-                <button onClick={startGame} className="px-12 py-5 bg-gradient-to-r from-cyan-600 to-teal-600 rounded-2xl text-white font-bold text-2xl hover:scale-105 transition-all">START</button>
+            <div className="absolute inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
+                {/* Optimized Level 6 Start Screen for Laptop Screens (Expanded Dimensions) */}
+                <div className="bg-[#020710] p-10 sm:p-16 rounded-[3rem] border-[5px] border-cyan-400 shadow-[0_0_60px_rgba(34,211,238,0.7)] max-w-5xl w-full text-center relative animate-pop-in flex flex-col items-center">
+                    
+                    <div className="flex flex-col md:flex-row items-center justify-between w-full gap-12 mb-12">
+                        {/* Title and Badge Section */}
+                        <div className="flex-1 flex flex-col items-center md:items-start text-center md:text-left space-y-6">
+                            <div>
+                                <h2 className="text-[3rem] font-pixel text-white mb-4 tracking-tighter uppercase">LEVEL 06</h2>
+                                
+                                {/* 6/60 Badge */}
+                                <div className="inline-block bg-[#0a1b32] px-12 py-3 rounded-2xl border border-cyan-500/30">
+                                    <span className="text-3xl font-bold text-cyan-400 font-mono tracking-widest">{config.label}</span>
+                                </div>
+                            </div>
+
+                            {/* Target Score Section */}
+                            <div className="pt-4">
+                                <p className="text-white text-sm font-black uppercase tracking-[0.3em] flex items-center justify-center md:justify-start gap-4">
+                                    TARGET SCORE <span className="text-red-500 text-3xl font-mono tracking-tighter">100</span>
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Patch Indicators Container (Expanded) */}
+                        <div className="flex-1 w-full bg-[#0b1426] p-10 sm:p-12 rounded-[2.5rem] border border-white/10 shadow-2xl">
+                            <div className="flex items-center justify-center gap-14">
+                                {/* FIND Patch Indicator - Now with light white text */}
+                                <div className="flex flex-col items-center gap-4">
+                                    <div className="w-24 h-24 rounded-full border-[4px] border-white/20 shadow-xl relative overflow-hidden" 
+                                         style={{ backgroundImage: `repeating-linear-gradient(45deg, #fff, #fff 3px, #000 3px, #000 7px)`, backgroundColor: '#333' }}>
+                                        <div className="absolute inset-0 bg-white/5"></div>
+                                    </div>
+                                    <span className="text-[10px] font-black text-slate-100 uppercase tracking-[0.4em]">FIND</span>
+                                </div>
+                                
+                                {/* Vertical Line Separator */}
+                                <div className="w-[1px] h-14 bg-white/10"></div>
+                                
+                                {/* AVOID Patch Indicator */}
+                                <div className="flex flex-col items-center gap-4">
+                                    <div className="w-24 h-24 rounded-full border-[4px] border-white/10 shadow-inner relative overflow-hidden" 
+                                         style={{ backgroundImage: `repeating-linear-gradient(135deg, #374151, #111827 7px)`, backgroundColor: '#222' }}>
+                                    </div>
+                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">AVOID</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Start Button: Cyan Pill with Slowly Rotating Stars */}
+                    <button 
+                        onClick={startGame} 
+                        className="w-full max-w-lg py-6 bg-cyan-500 hover:bg-cyan-400 text-white font-black text-2xl rounded-3xl transition-all shadow-[0_20px_40px_rgba(6,182,212,0.3)] active:scale-95 uppercase tracking-[0.3em] flex items-center justify-center gap-6"
+                    >
+                        <span className="text-xl opacity-80 animate-spin-slow">★</span>
+                        START
+                        <span className="text-xl opacity-80 animate-spin-slow">★</span>
+                    </button>
+                </div>
+                
+                <style>{`
+                    @keyframes pop-in {
+                        0% { transform: scale(0.92); opacity: 0; }
+                        100% { transform: scale(1); opacity: 1; }
+                    }
+                    @keyframes spin-very-slow {
+                        from { transform: rotate(0deg); }
+                        to { transform: rotate(360deg); }
+                    }
+                    .animate-pop-in { animation: pop-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+                    .animate-spin-slow { animation: spin-very-slow 6s linear infinite; }
+                `}</style>
             </div>
         );
         if (gameState === 'levelComplete') return (
@@ -224,7 +291,14 @@ const SnakeGame: React.FC<SnakeGameProps> = ({ levelIndex, unlockedIndex, onLeve
                 <div className="flex-grow mx-6 max-w-md hidden sm:block"><div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-cyan-500 transition-all" style={{ width: `${Math.min(100, score)}%` }}></div></div></div>
                 <div className="flex items-center pl-4 border-l border-slate-700 shrink-0"><div className="flex flex-col items-center mr-6 border-r border-slate-800 pr-6"><span className="text-[10px] font-bold text-white uppercase">GOAL</span><span className="text-2xl font-bold text-red-500 font-mono">100</span></div><div className="flex flex-col items-center"><span className="text-[10px] font-bold text-slate-400 uppercase">SCORE</span><span className="text-2xl font-bold text-cyan-400 font-mono">{score}</span></div></div>
             </header>
-            <main className="flex-grow w-full h-full relative touch-none bg-black" onPointerDown={onPointerDown}><div ref={gameContainerRef} className="w-full h-full flex items-center justify-center relative bg-black"><div className="relative overflow-hidden pointer-events-auto bg-black" style={{ width: `${gridCols * GRID_CELL_SIZE}px`, height: `${gridRows * GRID_CELL_SIZE}px`, border: `${BORDER_THICKNESS}px solid #475569` }}>{renderOverlay()}{gameState === 'playing' && (<><canvas ref={canvasRef} className="absolute inset-0 pointer-events-none z-20" /><div className="absolute animate-pulse" style={{ width: GRID_CELL_SIZE, height: GRID_CELL_SIZE, top: target.y * GRID_CELL_SIZE, left: target.x * GRID_CELL_SIZE, zIndex: 100 }}><div className="w-full h-full rounded-full" style={{ backgroundImage: `repeating-linear-gradient(45deg, rgba(255,255,255,${currentContrast}), rgba(255,255,255,${currentContrast}) 2px, rgba(0,0,0,${currentContrast}) 2px, rgba(0,0,0,${currentContrast}) 4px)`, backgroundColor: `rgba(255,255,255,0.2)` }} /></div>{distractors.map(d => (<div key={d.id} className="absolute" style={{ width: GRID_CELL_SIZE, height: GRID_CELL_SIZE, top: d.y * GRID_CELL_SIZE, left: d.x * GRID_CELL_SIZE, zIndex: 5 }}><div className="w-full h-full rounded-full" style={{ backgroundImage: `repeating-linear-gradient(135deg, rgba(55,65,81,${currentContrast}), rgba(17,24,39,${currentContrast}) 4px)`, backgroundColor: `rgba(55,65,81,0.5)` }} /></div>))}</>)}</div></div></main>
+            <main className="flex-grow w-full h-full relative touch-none bg-black" onPointerDown={onPointerDown}>
+                {renderOverlay()}
+                <div ref={gameContainerRef} className="w-full h-full flex items-center justify-center relative bg-black">
+                    <div className="relative overflow-hidden pointer-events-auto bg-black" style={{ width: `${gridCols * GRID_CELL_SIZE}px`, height: `${gridRows * GRID_CELL_SIZE}px`, border: `${BORDER_THICKNESS}px solid #1e293b` }}>
+                        {gameState === 'playing' && (<><canvas ref={canvasRef} className="absolute inset-0 pointer-events-none z-20" /><div className="absolute animate-pulse" style={{ width: GRID_CELL_SIZE, height: GRID_CELL_SIZE, top: target.y * GRID_CELL_SIZE, left: target.x * GRID_CELL_SIZE, zIndex: 100 }}><div className="w-full h-full rounded-full" style={{ backgroundImage: `repeating-linear-gradient(45deg, rgba(255,255,255,${currentContrast}), rgba(255,255,255,${currentContrast}) 2px, rgba(0,0,0,${currentContrast}) 2px, rgba(0,0,0,${currentContrast}) 4px)`, backgroundColor: `rgba(255,255,255,0.2)` }} /></div>{distractors.map(d => (<div key={d.id} className="absolute" style={{ width: GRID_CELL_SIZE, height: GRID_CELL_SIZE, top: d.y * GRID_CELL_SIZE, left: d.x * GRID_CELL_SIZE, zIndex: 5 }}><div className="w-full h-full rounded-full" style={{ backgroundImage: `repeating-linear-gradient(135deg, rgba(55,65,81,${currentContrast}), rgba(17,24,39,${currentContrast}) 4px)`, backgroundColor: `rgba(55,65,81,0.5)` }} /></div>))}</>)}
+                    </div>
+                </div>
+            </main>
             <ConfirmationModal isOpen={isExitModalOpen} title="Confirm Exit" message="Do you want to exit to the Main Menu?" onConfirm={() => onExit()} onCancel={() => { setIsExitModalOpen(false); setIsPaused(false); }} />
         </div>
     );
@@ -237,21 +311,18 @@ interface Level6Props {
 
 const Level6: React.FC<Level6Props> = ({ setCurrentPage, saveLevelCompletion }) => {
     const [currentLevelIndex, setCurrentLevelIndex] = useState(0);
-    const [unlockedLevelIndex, setUnlockedLevelIndex] = useState(0);
+    const [unlockedLevelIndex, setUnlockedLevelIndex] = useState(ACUITY_CONFIG.length - 1);
 
     const handleLevelComplete = (score: number, config: any) => {
         let stars = 0;
         if (score >= 100) stars = 3; else if (score >= 60) stars = 2; else if (score >= 30) stars = 1;
-
         const acuityLabelAsSize = parseFloat(config.label.split('/')[1]); 
-
         if (stars > 0) {
-             if (currentLevelIndex < ACUITY_CONFIG.length - 1) setUnlockedLevelIndex(prev => Math.max(prev, currentLevelIndex + 1));
              saveLevelCompletion('level6', stars, { score, incorrect: 0, size: acuityLabelAsSize, category: 'amblyo' });
         }
     };
     
-    return (<SnakeGame levelIndex={currentLevelIndex} unlockedIndex={unlockedLevelIndex} onLevelSelect={setCurrentLevelIndex} onExit={() => setCurrentPage('home')} onComplete={handleLevelComplete} saveMainProgress={saveLevelCompletion} />);
+    return (<SnakeGame levelIndex={currentLevelIndex} unlockedIndex={unlockedLevelIndex} onLevelSelect={setCurrentLevelIndex} onExit={() => setCurrentPage('home')} onComplete={handleLevelComplete} saveMainProgress={(stars, stats) => saveLevelCompletion('level6', stars, stats)} />);
 };
 
 export default Level6;

@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Page, LevelStats } from '../../types';
 import LevelLayout from '../LevelLayout';
 import GameEndScreen from '../GameEndScreen';
-import GaborEmoji from '../GaborEmoji';
+import PatternEmoji from '../PatternEmoji';
 import { EMOJI_PAIRS_L3 } from '../../constants';
 
 interface Level3Props {
@@ -160,22 +160,22 @@ const Level3: React.FC<Level3Props> = ({ setCurrentPage, saveLevelCompletion }) 
 
     return (
       <div className="flex justify-center items-center h-full w-full space-x-12 sm:space-x-24">
-        <GaborEmoji
-          hasGaborPatch={correctSide === 0}
+        <PatternEmoji
+          hasPatternPatch={correctSide === 0}
           contrast={currentContrast}
           fontSize={currentFontSize}
           onClick={() => handleEmojiClick(correctSide === 0)}
         >
           {stimulusEmoji}
-        </GaborEmoji>
-        <GaborEmoji
-          hasGaborPatch={correctSide === 1}
+        </PatternEmoji>
+        <PatternEmoji
+          hasPatternPatch={correctSide === 1}
           contrast={currentContrast}
           fontSize={currentFontSize}
           onClick={() => handleEmojiClick(correctSide === 1)}
         >
           {stimulusEmoji}
-        </GaborEmoji>
+        </PatternEmoji>
       </div>
     );
   };
@@ -185,7 +185,7 @@ const Level3: React.FC<Level3Props> = ({ setCurrentPage, saveLevelCompletion }) 
        <FireworksReward show={showStarAnimation} />
        {renderGame()}
        {gameState === 'playing' && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-full max-w-sm px-4">
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-full max-sm px-4">
             <div className="mb-2">
                 <div className="flex justify-between items-center mb-1 text-slate-600">
                     <span className="text-sm font-semibold">Progress</span>

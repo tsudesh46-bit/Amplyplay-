@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import { Page, CompletedLevels, LevelStats, Language } from '../types';
 import { TOTAL_LEVELS } from '../constants';
 import { HomeIcon, StarIcon } from './ui/Icons';
-import ConfirmationModal from './ConfirmationModal';
 
 interface PerformancePageProps {
   setCurrentPage: (page: Page) => void;
@@ -13,17 +12,11 @@ interface PerformancePageProps {
 }
 
 const PerformancePage: React.FC<PerformancePageProps> = ({ setCurrentPage, completedLevels, gameHistory, language }) => {
-  const [isConfirmingExit, setIsConfirmingExit] = useState(false);
   const [filter, setFilter] = useState<'all' | 'amblyo' | 'strab'>('all');
   
   const levels = Array.from({ length: TOTAL_LEVELS }, (_, i) => i + 1);
 
   const handleHomeClick = () => {
-    setIsConfirmingExit(true);
-  };
-
-  const handleConfirmExit = () => {
-    setIsConfirmingExit(false);
     setCurrentPage('home');
   };
 
@@ -167,15 +160,6 @@ const PerformancePage: React.FC<PerformancePageProps> = ({ setCurrentPage, compl
         <span className="absolute -inset-2 rounded-full border border-cyan-100 opacity-40 group-hover:scale-110 group-hover:opacity-60 transition-all duration-500 ease-out"></span>
         <HomeIcon className="w-10 h-10 text-cyan-600 group-hover:text-cyan-700 transition-colors" />
       </button>
-
-      <ConfirmationModal
-        isOpen={isConfirmingExit}
-        title="Confirm Exit"
-        message="Are you sure you want to return to the main menu?"
-        onConfirm={handleConfirmExit}
-        onCancel={() => setIsConfirmingExit(false)}
-        confirmText="Exit"
-      />
 
       <style>{`
         @keyframes fade-in-up {

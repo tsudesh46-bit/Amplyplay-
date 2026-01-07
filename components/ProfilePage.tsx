@@ -11,7 +11,6 @@ interface ProfilePageProps {
 }
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ setCurrentPage, profile, onUpdateProfile }) => {
-  const [isConfirmingExit, setIsConfirmingExit] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   
@@ -20,11 +19,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ setCurrentPage, profile, onUp
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
 
   const handleHomeClick = () => {
-    setIsConfirmingExit(true);
-  };
-
-  const handleConfirmExit = () => {
-    setIsConfirmingExit(false);
     setCurrentPage('home');
   };
 
@@ -317,15 +311,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ setCurrentPage, profile, onUp
         <span className="absolute inset-0 rounded-full border-2 border-cyan-200 opacity-70 group-hover:border-cyan-500 group-hover:opacity-100 transition-all duration-300"></span>
         <HomeIcon className="w-10 h-10 text-cyan-600 group-hover:text-cyan-700 transition-colors" />
       </button>
-
-      <ConfirmationModal
-        isOpen={isConfirmingExit}
-        title="Confirm Exit"
-        message="Are you sure you want to return to the main menu?"
-        onConfirm={handleConfirmExit}
-        onCancel={() => setIsConfirmingExit(false)}
-        confirmText="Exit"
-      />
 
       <style>{`
         @keyframes fade-in-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
