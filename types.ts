@@ -123,7 +123,7 @@ export interface LevelStats {
   size?: number;
   timestamp: number;
   duration?: number; // Time spent in seconds
-  category: 'amblyo' | 'strab';
+  category: 'amblyo' | 'strab' | 'percep';
   userId: string;
 }
 

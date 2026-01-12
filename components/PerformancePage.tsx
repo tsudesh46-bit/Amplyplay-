@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Page, CompletedLevels, LevelStats, Language } from '../types';
 import { TOTAL_LEVELS } from '../constants';
 import { HomeIcon, StarIcon } from './ui/Icons';
@@ -9,11 +9,16 @@ interface PerformancePageProps {
   completedLevels: CompletedLevels;
   gameHistory: LevelStats[];
   language: Language;
+  initialFilter?: 'all' | 'amblyo' | 'strab' | 'percep';
 }
 
-const PerformancePage: React.FC<PerformancePageProps> = ({ setCurrentPage, completedLevels, gameHistory, language }) => {
-  const [filter, setFilter] = useState<'all' | 'amblyo' | 'strab'>('all');
+const PerformancePage: React.FC<PerformancePageProps> = ({ setCurrentPage, completedLevels, gameHistory, language, initialFilter = 'all' }) => {
+  const [filter, setFilter] = useState<'all' | 'amblyo' | 'strab' | 'percep'>(initialFilter);
   
+  useEffect(() => {
+    setFilter(initialFilter);
+  }, [initialFilter]);
+
   const levels = Array.from({ length: TOTAL_LEVELS }, (_, i) => i + 1);
 
   const handleHomeClick = () => {
@@ -91,6 +96,10 @@ const PerformancePage: React.FC<PerformancePageProps> = ({ setCurrentPage, compl
                         onClick={() => setFilter('strab')}
                         className={`px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${filter === 'strab' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
                     >Strab</button>
+                    <button 
+                        onClick={() => setFilter('percep')}
+                        className={`px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${filter === 'percep' ? 'bg-white text-violet-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+                    >Percep</button>
                 </div>
             </div>
 
@@ -113,7 +122,7 @@ const PerformancePage: React.FC<PerformancePageProps> = ({ setCurrentPage, compl
                                 </td>
                                 <td className="px-8 py-6">
                                     <div className="flex items-center gap-3">
-                                        <div className={`w-2.5 h-2.5 rounded-full ${item.category === 'amblyo' ? 'bg-cyan-500' : 'bg-indigo-500'}`}></div>
+                                        <div className={`w-2.5 h-2.5 rounded-full ${item.category === 'amblyo' ? 'bg-cyan-500' : item.category === 'strab' ? 'bg-indigo-500' : 'bg-violet-500'}`}></div>
                                         <div className="text-sm font-black text-slate-900 uppercase">{item.levelId}</div>
                                     </div>
                                 </td>

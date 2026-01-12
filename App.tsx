@@ -44,6 +44,9 @@ const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [themeColor, setThemeColor] = useState('cyan');
 
+  // Dash Navigation State
+  const [performanceFilter, setPerformanceFilter] = useState<'all' | 'amblyo' | 'strab' | 'percep'>('all');
+
   // Timing state
   const sessionStartTimeRef = useRef<number | null>(null);
 
@@ -111,12 +114,19 @@ const App: React.FC = () => {
 
   // Track session start when a level is entered
   useEffect(() => {
-    if (currentPage.includes('level')) {
+    if (currentPage.includes('level') || currentPage === 'perceptual') {
         sessionStartTimeRef.current = Date.now();
     } else {
         sessionStartTimeRef.current = null;
     }
     setIsSideMenuOpen(false);
+  }, [currentPage]);
+
+  // Reset performance filter when leaving performance page to avoid sticky state
+  useEffect(() => {
+    if (currentPage !== 'performance') {
+      setPerformanceFilter('all');
+    }
   }, [currentPage]);
 
   // Current User Progress
@@ -154,7 +164,7 @@ const App: React.FC = () => {
         const newEntry: LevelStats = {
           levelId, stars, score: details.score || 0, incorrect: details.incorrect || 0,
           contrast: details.contrast, size: details.size, timestamp: Date.now(),
-          duration: sessionDuration, category: details.category || (levelId.startsWith('strab') ? 'strab' : 'amblyo'),
+          duration: sessionDuration, category: details.category || (levelId.startsWith('strab') ? 'strab' : levelId.startsWith('percep') ? 'percep' : 'amblyo'),
           userId: currentUser.id
         };
         newHistory = [newEntry, ...userProg.history].slice(0, 1000);
@@ -241,7 +251,7 @@ const App: React.FC = () => {
       case 'strabplay_home':
         return <StrabplayHome setCurrentPage={setCurrentPage} completedLevels={completedLevels} onLogout={handleLogoutRequest} isDemoMode={isDemoMode} userProfile={currentUser || undefined} isDarkMode={isDarkMode} />;
       case 'performance':
-        return <PerformancePage setCurrentPage={setCurrentPage} completedLevels={completedLevels} gameHistory={gameHistory} language={language} />;
+        return <PerformancePage setCurrentPage={setCurrentPage} completedLevels={completedLevels} gameHistory={gameHistory} language={language} initialFilter={performanceFilter} />;
       case 'profile':
         return <ProfilePage setCurrentPage={setCurrentPage} profile={currentUser!} onUpdateProfile={updateProfile} />;
       case 'settings':
@@ -253,7 +263,7 @@ const App: React.FC = () => {
       case 'media':
         return <MediaPage setCurrentPage={setCurrentPage} />;
       case 'perceptual':
-        return <PerceptualPage setCurrentPage={setCurrentPage} />;
+        return <PerceptualPage setCurrentPage={setCurrentPage} saveLevelCompletion={saveLevelCompletion} setPerformanceFilter={setPerformanceFilter} />;
       case 'level1': return <Level1 {...levelProps} />;
       case 'level2': return <Level2 {...levelProps} />;
       case 'level3': return <Level3 {...levelProps} />;
