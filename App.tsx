@@ -263,7 +263,7 @@ const App: React.FC = () => {
       case 'media':
         return <MediaPage setCurrentPage={setCurrentPage} />;
       case 'perceptual':
-        return <PerceptualPage setCurrentPage={setCurrentPage} saveLevelCompletion={saveLevelCompletion} setPerformanceFilter={setPerformanceFilter} />;
+        return <PerceptualPage setCurrentPage={setCurrentPage} saveLevelCompletion={saveLevelCompletion} setPerformanceFilter={setPerformanceFilter} isDarkMode={isDarkMode} />;
       case 'level1': return <Level1 {...levelProps} />;
       case 'level2': return <Level2 {...levelProps} />;
       case 'level3': return <Level3 {...levelProps} />;
